@@ -3,4 +3,7 @@
     <Project Path="src/Stellaegis.Blobs/Stellaegis.Blobs.csproj" />
     <Project Path="src/Stellaegis.Blobs.FileSystem/Stellaegis.Blobs.FileSystem.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Stellaegis.Blobs.Tests/Stellaegis.Blobs.Tests.csproj" />
+  </Folder>
 </Solution>
