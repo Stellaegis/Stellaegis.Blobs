@@ -1,16 +1,14 @@
 namespace Stellaegis.Blobs;
 
 /// <summary>
-/// Stores and retrieves opaque binary content, isolated per tenant. The provider-agnostic
-/// counterpart of <c>ISecretsProvider</c> for large binary payloads: one abstraction, swappable
-/// adapters (filesystem, S3-compatible, Azure Blob) selected by configuration.
+/// Stores and retrieves opaque binary content, isolated per holder and blob space
+/// (see <see cref="BlobLocation"/>). One abstraction, with the storage backend chosen by the adapter
+/// registered.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Unlike the vault, a blob store is a <b>library, not a hosted service</b>: bytes flow directly
-/// between the consuming service and the storage backend — the remote endpoint <i>is</i> S3/Azure.
-/// The credentials for a tenant's backend, however, are resolved like a tenant database connection
-/// string (default installation binding, or a per-tenant vault override for BYOS).
+/// A blob store is a <b>library, not a hosted service</b>: bytes flow directly between the consuming
+/// code and the storage backend.
 /// </para>
 /// <para>Implementations must never log blob content.</para>
 /// </remarks>

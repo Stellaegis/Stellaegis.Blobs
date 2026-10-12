@@ -16,7 +16,7 @@ public sealed class BlobNotFoundException : Exception
     private static string Describe(BlobLocation location)
     {
         ArgumentNullException.ThrowIfNull(location);
-        var owner = location.IsSystem ? "system" : location.TenantSlug;
-        return $"{owner}/{location.Name}/{location.Key}";
+        var holder = location.IsPlatform ? "platform" : location.Holder;
+        return $"{holder}/{location.Name}/{location.Key}";
     }
 }

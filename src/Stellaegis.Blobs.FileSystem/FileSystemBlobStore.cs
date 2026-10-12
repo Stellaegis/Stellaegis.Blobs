@@ -5,14 +5,14 @@ namespace Stellaegis.Blobs.FileSystem;
 
 /// <summary>
 /// Filesystem implementation of <see cref="IBlobStore"/> for development. Each blob space maps to a
-/// directory under the configured root: <c>{root}/{tenantSlug}_{name}</c> for a tenant, or
-/// <c>{root}/_system_{name}</c> for the shared framework space. The leading underscore of the system
-/// container can never be produced by a real slug (slugs start with a letter and contain no <c>_</c>),
-/// so the two namespaces can never collide.
+/// directory under the configured root: <c>{root}/{holder}_{name}</c> for a holder, or
+/// <c>{root}/_platform_{name}</c> for the platform's own space. A holder starts with a letter and a
+/// holder or a space name never contains <c>_</c>, so no two locations share a directory and the
+/// platform's leading underscore can never be produced by a holder.
 /// </summary>
 public sealed class FileSystemBlobStore : IBlobStore
 {
-    private const string SystemContainerPrefix = "_system_";
+    private const string PlatformContainerPrefix = "_platform_";
 
     private readonly string _root;
     private readonly ILogger<FileSystemBlobStore> _logger;
@@ -78,7 +78,7 @@ public sealed class FileSystemBlobStore : IBlobStore
         => Task.FromResult<Uri?>(null);
 
     private static string Container(BlobLocation location)
-        => location.IsSystem ? $"{SystemContainerPrefix}{location.Name}" : $"{location.TenantSlug}_{location.Name}";
+        => location.IsPlatform ? $"{PlatformContainerPrefix}{location.Name}" : $"{location.Holder}_{location.Name}";
 
     private string ResolvePath(BlobLocation location)
     {

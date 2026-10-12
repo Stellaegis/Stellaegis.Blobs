@@ -3,54 +3,57 @@ using System.Text.RegularExpressions;
 namespace Stellaegis.Blobs;
 
 /// <summary>
-/// Addresses a blob by the two stable, non-physical layers Stellaegis uses for tenant storage:
+/// Addresses a blob by two stable, non-physical layers:
 /// <list type="bullet">
-///   <item><b>Who</b> — <see cref="TenantSlug"/> (the empty-string sentinel = the framework system space)
-///   and <see cref="Name"/> (the blob space, e.g. <c>templates</c>/<c>ged</c>/<c>trash</c>).
-///   Together they select the <b>binding</b> (which backend/account/credentials hosts the blob).</item>
+///   <item><b>Where</b> — <see cref="Holder"/> (the party the blob belongs to, or <see cref="Platform"/>)
+///   and <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the space
+///   an adapter stores the blob in.</item>
 ///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that space.</item>
 /// </list>
-/// The physical provider, endpoint, container and credentials are never part of a location:
-/// they are resolved per tenant by the <see cref="IBlobStore"/> implementation (default installation
-/// config, or a per-tenant vault binding for "bring your own blob storage"). This keeps stored
-/// keys stable across a backend migration and free of any secret.
+/// The physical provider, endpoint, container and credentials are never part of a location: they belong
+/// to the <see cref="IBlobStore"/> implementation. This keeps stored keys stable across a backend migration
+/// and free of any secret.
 /// </summary>
 /// <remarks>
-/// A location with <see cref="IsSystem"/> = <see langword="true"/> designates shared, framework-owned
-/// content (e.g. a default invoice template) — the same <c>tenant_slug = ''</c> sentinel used by the
-/// <c>doc.templates</c> resolution.
+/// A location only enforces the grammar its adapters need to store a blob without collision or path
+/// traversal. Any further rule on a holder or a space name — a business format, reserved values — belongs
+/// to the consumer, which applies it before building a location.
 /// </remarks>
 public sealed partial record BlobLocation
 {
-    /// <summary>The sentinel <see cref="TenantSlug"/> value designating the framework system space.</summary>
-    public const string SystemTenant = "";
+    /// <summary>
+    /// The <see cref="Holder"/> value designating the platform itself rather than one of its holders.
+    /// It lies outside the holder grammar, so it never collides with a real holder.
+    /// </summary>
+    public const string Platform = "";
 
     /// <summary>
-    /// Tenant slug owning the blob, or <see cref="SystemTenant"/> (empty string) for shared
-    /// framework-owned content. Never collides with a real slug (which must start with a letter).
+    /// The holder the blob belongs to, or <see cref="Platform"/> (empty string) for content owned by
+    /// the platform. A holder starts with a lowercase letter, followed by 2 to 62 lowercase letters,
+    /// digits or single hyphens.
     /// </summary>
-    public string TenantSlug { get; }
+    public string Holder { get; }
 
-    /// <summary>Blob space discriminant — see <see cref="BlobNames"/>.</summary>
+    /// <summary>Blob space discriminant: a lowercase letter, then lowercase letters, digits or hyphens.</summary>
     public string Name { get; }
 
     /// <summary>
-    /// Logical object key within the tenant's blob space (e.g. <c>standard_invoice.scriban</c>
+    /// Logical object key within the holder's blob space (e.g. <c>invoice.scriban</c>
     /// or <c>2026/06/08/{id}.pdf</c>). Forward-slash separated, relative, never rooted.
     /// </summary>
     public string Key { get; }
 
     /// <summary>Creates a validated blob location.</summary>
     /// <exception cref="ArgumentException">A segment is empty, malformed, or the key escapes its space.</exception>
-    public BlobLocation(string tenantSlug, string name, string key)
+    public BlobLocation(string holder, string name, string key)
     {
-        ArgumentNullException.ThrowIfNull(tenantSlug);
+        ArgumentNullException.ThrowIfNull(holder);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-        if (tenantSlug.Length != 0 && (!TenantSlugRegex().IsMatch(tenantSlug) || tenantSlug.Contains("--", StringComparison.Ordinal)))
+        if (holder.Length != 0 && (!HolderRegex().IsMatch(holder) || holder.Contains("--", StringComparison.Ordinal)))
             throw new ArgumentException(
-                $"'{tenantSlug}' is not a valid tenant slug (or the system sentinel '').", nameof(tenantSlug));
+                $"'{holder}' is not a valid holder (or the platform value '').", nameof(holder));
 
         if (!NameRegex().IsMatch(name))
             throw new ArgumentException($"'{name}' is not a valid blob space name.", nameof(name));
@@ -59,16 +62,16 @@ public sealed partial record BlobLocation
             throw new ArgumentException(
                 $"'{key}' is not a valid blob key (must be relative, forward-slash separated, no '..').", nameof(key));
 
-        TenantSlug = tenantSlug;
+        Holder = holder;
         Name = name;
         Key = key;
     }
 
-    /// <summary>Creates a location in the shared framework system space (<see cref="SystemTenant"/>).</summary>
-    public static BlobLocation System(string name, string key) => new(SystemTenant, name, key);
+    /// <summary>Creates a location in the platform's own space (<see cref="Platform"/>).</summary>
+    public static BlobLocation ForPlatform(string name, string key) => new(Platform, name, key);
 
-    /// <summary><see langword="true"/> when this location designates the framework system space.</summary>
-    public bool IsSystem => TenantSlug.Length == 0;
+    /// <summary><see langword="true"/> when this location designates the platform's own space.</summary>
+    public bool IsPlatform => Holder.Length == 0;
 
     /// <summary>
     /// Rejects rooted paths, backslashes and any <c>..</c> segment, so a key can never escape
@@ -89,7 +92,7 @@ public sealed partial record BlobLocation
     }
 
     [GeneratedRegex("^[a-z][a-z0-9-]{2,62}$")]
-    private static partial Regex TenantSlugRegex();
+    private static partial Regex HolderRegex();
 
     [GeneratedRegex("^[a-z][a-z0-9-]*$")]
     private static partial Regex NameRegex();

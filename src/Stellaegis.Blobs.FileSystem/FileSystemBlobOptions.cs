@@ -10,7 +10,7 @@ public sealed class FileSystemBlobOptions
 
     /// <summary>
     /// Absolute root directory under which per-space containers are created
-    /// (<c>{root}/{tenantSlug}_{name}</c>, or <c>{root}/_system_{name}</c> for the system space).
+    /// (<c>{root}/{holder}_{name}</c>, or <c>{root}/_platform_{name}</c> for the platform's own space).
     /// </summary>
     public string RootPath { get; set; } = "";
 }
