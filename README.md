@@ -55,14 +55,37 @@ one is invalid.
 | Part | Rule |
 | --- | --- |
 | holder | `BlobLocation.Platform` (empty), or 3 to 63 characters: a lowercase letter, then lowercase letters, digits and hyphens, with no two consecutive hyphens |
-| space | a lowercase letter, then lowercase letters, digits and hyphens |
-| key | relative: no leading `/`, no `\`, no empty segment, no `.` or `..` segment |
+| space | 1 to 63 characters: a lowercase letter, then lowercase letters, digits and hyphens |
+| key | see below |
 
-These rules are the ones an adapter needs to store a blob safely. The holder and space rules keep
-every pair on a distinct directory or container name, and the key rule keeps a key from escaping its
-space (path traversal). They are not a business rule. If your application constrains its holder
-identifiers further, with a format of its own or reserved values, check that rule in your code before
-building a location. The library has no way to know it.
+A key is made of segments separated by `/`. It is accepted when every supported backend can store it
+unchanged, on Windows and Linux file systems as well as in object storages such as S3 or Azure Blob:
+
+- it uses lowercase printable ASCII only: lowercase letters, digits, spaces and punctuation;
+- it contains none of `< > : " | ? * \`;
+- no segment is empty, `.` or `..`, and no segment ends with a dot or a space;
+- no segment is a name Windows reserves for a device: `con`, `prn`, `aux`, `nul`, `com0` to `com9`,
+  `lpt0` to `lpt9`, with or without an extension (`nul.txt` is refused);
+- it is at most 1,024 characters long (`BlobLocation.MaxKeyLength`), and each segment at most 255
+  (`BlobLocation.MaxSegmentLength`).
+
+Each rule closes a case where at least one backend would refuse the key, change it, or confuse it
+with another. On Windows, `a:b` reads as a path on drive `A:`, a trailing dot or space is silently
+dropped, so `report.` and `report` are the same file, and `nul.txt` opens a device rather than a file.
+Windows and macOS file systems ignore case, so `Report.pdf` and `report.pdf` would be one file there
+and two blobs elsewhere. Unicode letters can be stored in two forms, composed or decomposed, which two
+different keys can share once displayed. Refusing these keys up front means a key that works with one
+adapter works with all of them.
+
+These rules make keys technical identifiers, built by your code: `2026/06/08/3f2a.pdf`,
+`3f2a9c/v1`. A name chosen by a user, such as `Mon fichier avec des accents.pdf`, keeps its case,
+accents and spaces as metadata stored beside the blob, typically in your database, and is given back
+at download time, for instance in the `Content-Disposition` header.
+
+The holder and space rules keep every pair on a distinct directory or container name, and the key
+rules keep a key inside its space (no path traversal). None of these rules is a business rule. If
+your application constrains its holder identifiers further, with a format of its own or reserved
+values, check that rule in your code before building a location. The library has no way to know it.
 
 ## Reading and writing
 
@@ -144,11 +167,11 @@ relative path is resolved against the process's current directory when the store
 Directories are created on the first write and are not removed when their last blob is deleted.
 
 The adapter suits development, tests and applications that run on a single machine. It cannot sign
-download URLs, so `TryGetDownloadUrlAsync` always returns `null`. It shares the limits of the file
-system underneath. On Windows, a key containing `:` is read as a path on another drive, so the
-adapter refuses it with an `ArgumentException` before touching the disk, and a key containing another
-character Windows refuses, such as `*` or `?`, fails with an `IOException`. On a case-insensitive file
-system, two keys that differ only by case designate the same file.
+download URLs, so `TryGetDownloadUrlAsync` always returns `null`. The key rules above already keep
+out what Windows or Linux would refuse. The remaining limit is the total path length: the root
+directory, the holder and space directory and the key add up, and a file system or a tool that still
+caps paths at 260 characters on Windows can refuse a long one. Choose a short root if your keys are
+long.
 
 ## One storage per holder
 
