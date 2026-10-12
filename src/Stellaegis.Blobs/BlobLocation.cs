@@ -34,14 +34,31 @@ public sealed partial record BlobLocation
     /// </summary>
     public string Holder { get; }
 
-    /// <summary>Blob space discriminant: a lowercase letter, then lowercase letters, digits or hyphens.</summary>
+    /// <summary>
+    /// Blob space discriminant: a lowercase letter, followed by up to 62 lowercase letters, digits or hyphens.
+    /// </summary>
     public string Name { get; }
 
     /// <summary>
     /// Logical object key within the holder's blob space (e.g. <c>invoice.scriban</c>
     /// or <c>2026/06/08/{id}.pdf</c>). Forward-slash separated, relative, never rooted.
     /// </summary>
+    /// <remarks>
+    /// A key is accepted only if every supported backend can store it unchanged: the file systems of Windows
+    /// and Linux, and object storages such as S3 or Azure Blob. It is made of lowercase printable ASCII, at
+    /// most <see cref="MaxKeyLength"/> characters, in segments of at most <see cref="MaxSegmentLength"/>
+    /// characters. It contains none of <c>&lt; &gt; : " | ? * \</c>, no segment is empty or ends with a dot
+    /// or a space, and no segment is a name Windows reserves for a device (<c>con</c>, <c>nul</c>,
+    /// <c>com1</c>…, with or without an extension). A name chosen by a user, with its case, accents or
+    /// spaces, is metadata to keep beside the blob, not a key.
+    /// </remarks>
     public string Key { get; }
+
+    /// <summary>The maximum length of a <see cref="Key"/>, in characters (one byte each, being ASCII).</summary>
+    public const int MaxKeyLength = 1024;
+
+    /// <summary>The maximum length of one segment of a <see cref="Key"/>, in characters.</summary>
+    public const int MaxSegmentLength = 255;
 
     /// <summary>Creates a validated blob location.</summary>
     /// <exception cref="ArgumentException">A segment is empty, malformed, or the key escapes its space.</exception>
@@ -55,8 +72,10 @@ public sealed partial record BlobLocation
             $"'{holder}' is not a valid holder (or the platform value '').");
         Name = Guard.Satisfies(name, n => NameRegex().IsMatch(n),
             $"'{name}' is not a valid blob space name.");
-        Key = Guard.Satisfies(key, IsSafeKey,
-            $"'{key}' is not a valid blob key (must be relative, forward-slash separated, no '..').");
+        Key = Guard.Satisfies(key, IsValidKey,
+            $"'{key}' is not a valid blob key (relative, forward-slash separated, lowercase printable ASCII " +
+            "without < > : \" | ? * \\, no empty segment, no segment ending with a dot or a space, " +
+            "no Windows device name, at most 1024 characters and 255 per segment).");
     }
 
     /// <summary>Creates a location in the platform's own space (<see cref="Platform"/>).</summary>
@@ -70,26 +89,46 @@ public sealed partial record BlobLocation
         => holder.Length == 0 || (HolderRegex().IsMatch(holder) && !holder.Contains("--", StringComparison.Ordinal));
 
     /// <summary>
-    /// Rejects rooted paths, backslashes and any <c>..</c> segment, so a key can never escape
-    /// the container an adapter resolves it into (defence in depth, independent of the backend).
+    /// Accepts a key every supported backend stores unchanged. Rooted paths, backslashes and <c>.</c> or
+    /// <c>..</c> segments are refused among the rest, so a key can never escape the container an adapter
+    /// resolves it into (defence in depth, independent of the backend).
     /// </summary>
-    private static bool IsSafeKey(string key)
+    private static bool IsValidKey(string key)
     {
-        if (key[0] is '/' or '\\') return false;
-        if (key.Contains('\\', StringComparison.Ordinal)) return false;
+        if (key.Length > MaxKeyLength) return false;
+
+        foreach (var c in key)
+        {
+            if (c is < ' ' or > '~' or (>= 'A' and <= 'Z') or '<' or '>' or ':' or '"' or '|' or '?' or '*' or '\\')
+                return false;
+        }
 
         foreach (var segment in key.Split('/'))
         {
-            if (segment.Length == 0 || segment == "." || segment == "..")
-                return false;
+            if (segment.Length is 0 or > MaxSegmentLength) return false;
+            if (segment[^1] is '.' or ' ') return false;
+            if (IsWindowsDeviceName(segment)) return false;
         }
 
         return true;
     }
 
+    /// <summary>
+    /// Windows reserves these names for devices, extension or not: <c>nul.txt</c> opens the null device.
+    /// </summary>
+    private static bool IsWindowsDeviceName(string segment)
+    {
+        var dot = segment.IndexOf('.', StringComparison.Ordinal);
+        var stem = (dot < 0 ? segment : segment[..dot]).TrimEnd(' ');
+
+        return stem is "con" or "prn" or "aux" or "nul"
+            || (stem.Length == 4 && (stem.StartsWith("com", StringComparison.Ordinal) || stem.StartsWith("lpt", StringComparison.Ordinal))
+                && stem[3] is >= '0' and <= '9');
+    }
+
     [GeneratedRegex("^[a-z][a-z0-9-]{2,62}$")]
     private static partial Regex HolderRegex();
 
-    [GeneratedRegex("^[a-z][a-z0-9-]*$")]
+    [GeneratedRegex("^[a-z][a-z0-9-]{0,62}$")]
     private static partial Regex NameRegex();
 }

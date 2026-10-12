@@ -77,10 +77,20 @@ public sealed class BlobLocationTests
         Assert.Equal("name", exception.ParamName);
     }
 
+    [Fact]
+    public void Space_name_is_at_most_63_characters()
+    {
+        Assert.Equal(63, new BlobLocation("acme", "f" + new string('a', 62), "a.pdf").Name.Length);
+        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "f" + new string('a', 63), "a.pdf"));
+    }
+
     [Theory]
     [InlineData("a.pdf")]
-    [InlineData("2026/06/08/a.pdf")]
-    [InlineData("..a/b..")]
+    [InlineData("2026/06/08/3f2a.pdf")]
+    [InlineData("3f2a9c/v1")]
+    [InlineData("..a/b")]
+    [InlineData("my file_v2 (final)+#@=,;!~.pdf")]
+    [InlineData("console/nullable/com10/lpt.txt/con-1")]
     public void Valid_key_is_accepted(string key)
         => Assert.Equal(key, new BlobLocation("acme", "files", key).Key);
 
@@ -95,10 +105,65 @@ public sealed class BlobLocationTests
     [InlineData("./a.pdf")]
     [InlineData("a/../b.pdf")]
     [InlineData("..")]
-    public void Unsafe_key_is_refused(string key)
+    public void Key_escaping_its_space_is_refused(string key)
     {
         var exception = Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
 
         Assert.Equal("key", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData("Invoice.pdf")]
+    [InlineData("facture-été.pdf")]
+    [InlineData("a:b.pdf")]
+    [InlineData("a<b.pdf")]
+    [InlineData("a>b.pdf")]
+    [InlineData("a\"b.pdf")]
+    [InlineData("a|b.pdf")]
+    [InlineData("a?b.pdf")]
+    [InlineData("a*b.pdf")]
+    [InlineData("a\tb.pdf")]
+    [InlineData("a\u007fb.pdf")]
+    public void Key_with_a_character_some_backend_refuses_is_refused(string key)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+
+        Assert.Equal("key", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData("a./b.pdf")]
+    [InlineData("a.pdf.")]
+    [InlineData("a /b.pdf")]
+    [InlineData("a.pdf ")]
+    public void Segment_ending_with_a_dot_or_a_space_is_refused(string key)
+        => Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+
+    [Theory]
+    [InlineData("con")]
+    [InlineData("prn")]
+    [InlineData("aux")]
+    [InlineData("nul")]
+    [InlineData("com1")]
+    [InlineData("lpt9")]
+    [InlineData("nul.txt")]
+    [InlineData("con.tar.gz")]
+    [InlineData("dir/aux.pdf")]
+    [InlineData("nul .txt")]
+    public void Windows_device_name_is_refused(string key)
+        => Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+
+    [Fact]
+    public void Key_length_is_bounded_overall_and_per_segment()
+    {
+        var segment = new string('a', BlobLocation.MaxSegmentLength);
+        Assert.Equal(segment, new BlobLocation("acme", "files", segment).Key);
+        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", segment + "a"));
+
+        // Three 255-character segments, one of 254 and a last of 1, with four slashes: exactly 1024 characters.
+        var atLimit = string.Join('/', segment, segment, segment, segment[..254]) + "/a";
+        Assert.Equal(BlobLocation.MaxKeyLength, atLimit.Length);
+        Assert.Equal(atLimit, new BlobLocation("acme", "files", atLimit).Key);
+        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", atLimit + "a"));
     }
 }
