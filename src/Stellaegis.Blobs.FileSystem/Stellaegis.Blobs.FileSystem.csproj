@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Stellaegis.Primitives" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Stellaegis.Blobs\Stellaegis.Blobs.csproj" />
   </ItemGroup>
 

@@ -16,7 +16,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<FileSystemBlobOptions> configure)
     {
-        ArgumentNullException.ThrowIfNull(configure);
+        Guard.NotNull(configure);
 
         services.Configure(configure);
         services.TryAddSingleton<IBlobStore, FileSystemBlobStore>();

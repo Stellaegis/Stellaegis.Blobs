@@ -15,8 +15,11 @@ namespace Stellaegis.Blobs;
 public interface IBlobStore
 {
     /// <summary>Opens a readable stream over the blob at <paramref name="location"/>.</summary>
-    /// <exception cref="BlobNotFoundException">No blob exists at the location.</exception>
-    Task<Stream> OpenReadAsync(BlobLocation location, CancellationToken cancellationToken = default);
+    /// <returns>
+    /// The content, or <see langword="null"/> when no blob exists at the location. An empty blob is not an
+    /// absent one: it opens as a stream of length 0.
+    /// </returns>
+    Task<Stream?> OpenReadAsync(BlobLocation location, CancellationToken cancellationToken = default);
 
     /// <summary>Writes <paramref name="content"/> to <paramref name="location"/>, overwriting any existing blob.</summary>
     Task WriteAsync(BlobLocation location, Stream content, CancellationToken cancellationToken = default);

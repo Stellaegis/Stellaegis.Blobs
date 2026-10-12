@@ -20,31 +20,30 @@ public sealed class FileSystemBlobStore : IBlobStore
     /// <summary>Creates the store, validating that a root path is configured.</summary>
     public FileSystemBlobStore(IOptions<FileSystemBlobOptions> options, ILogger<FileSystemBlobStore> logger)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(options);
+        _logger = Guard.NotNull(logger);
 
-        var root = options.Value.RootPath;
-        if (string.IsNullOrWhiteSpace(root))
-            throw new ArgumentException($"{nameof(FileSystemBlobOptions)}.{nameof(FileSystemBlobOptions.RootPath)} is required.", nameof(options));
+        var root = Guard.Satisfies(options.Value.RootPath, r => !string.IsNullOrWhiteSpace(r),
+            $"{nameof(FileSystemBlobOptions)}.{nameof(FileSystemBlobOptions.RootPath)} is required.", nameof(options));
 
         _root = Path.GetFullPath(root);
     }
 
     /// <inheritdoc />
-    public Task<Stream> OpenReadAsync(BlobLocation location, CancellationToken cancellationToken = default)
+    public Task<Stream?> OpenReadAsync(BlobLocation location, CancellationToken cancellationToken = default)
     {
         var path = ResolvePath(location);
         if (!File.Exists(path))
-            throw new BlobNotFoundException(location);
+            return Task.FromResult<Stream?>(null);
 
         Stream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
-        return Task.FromResult(stream);
+        return Task.FromResult<Stream?>(stream);
     }
 
     /// <inheritdoc />
     public async Task WriteAsync(BlobLocation location, Stream content, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(content);
+        Guard.NotNull(content);
 
         var path = ResolvePath(location);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -82,7 +81,7 @@ public sealed class FileSystemBlobStore : IBlobStore
 
     private string ResolvePath(BlobLocation location)
     {
-        ArgumentNullException.ThrowIfNull(location);
+        Guard.NotNull(location);
 
         var containerRoot = Path.GetFullPath(Path.Combine(_root, Container(location)));
         var full = Path.GetFullPath(Path.Combine(containerRoot, Path.Combine(location.Key.Split('/'))));

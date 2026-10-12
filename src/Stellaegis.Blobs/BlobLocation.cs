@@ -47,24 +47,16 @@ public sealed partial record BlobLocation
     /// <exception cref="ArgumentException">A segment is empty, malformed, or the key escapes its space.</exception>
     public BlobLocation(string holder, string name, string key)
     {
-        ArgumentNullException.ThrowIfNull(holder);
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        Guard.NotNull(holder);
+        Guard.NotWhiteSpace(name);
+        Guard.NotWhiteSpace(key);
 
-        if (holder.Length != 0 && (!HolderRegex().IsMatch(holder) || holder.Contains("--", StringComparison.Ordinal)))
-            throw new ArgumentException(
-                $"'{holder}' is not a valid holder (or the platform value '').", nameof(holder));
-
-        if (!NameRegex().IsMatch(name))
-            throw new ArgumentException($"'{name}' is not a valid blob space name.", nameof(name));
-
-        if (!IsSafeKey(key))
-            throw new ArgumentException(
-                $"'{key}' is not a valid blob key (must be relative, forward-slash separated, no '..').", nameof(key));
-
-        Holder = holder;
-        Name = name;
-        Key = key;
+        Holder = Guard.Satisfies(holder, IsValidHolder,
+            $"'{holder}' is not a valid holder (or the platform value '').");
+        Name = Guard.Satisfies(name, n => NameRegex().IsMatch(n),
+            $"'{name}' is not a valid blob space name.");
+        Key = Guard.Satisfies(key, IsSafeKey,
+            $"'{key}' is not a valid blob key (must be relative, forward-slash separated, no '..').");
     }
 
     /// <summary>Creates a location in the platform's own space (<see cref="Platform"/>).</summary>
@@ -72,6 +64,10 @@ public sealed partial record BlobLocation
 
     /// <summary><see langword="true"/> when this location designates the platform's own space.</summary>
     public bool IsPlatform => Holder.Length == 0;
+
+    /// <summary>Accepts <see cref="Platform"/> or a holder matching the grammar, without consecutive hyphens.</summary>
+    private static bool IsValidHolder(string holder)
+        => holder.Length == 0 || (HolderRegex().IsMatch(holder) && !holder.Contains("--", StringComparison.Ordinal));
 
     /// <summary>
     /// Rejects rooted paths, backslashes and any <c>..</c> segment, so a key can never escape
