@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Blobs</RootNamespace>
     <PackageId>Stellaegis.Blobs</PackageId>
-    <Description>Stellaegis blob storage abstraction: a provider-agnostic IBlobStore over opaque binary content, isolated per tenant. Shared by the document (GED) and trash domains. Adapters (filesystem, S3, Azure Blob) live in companion packages.</Description>
-    <PackageTags>stellaegis;blobs;storage;object-storage;multi-tenant</PackageTags>
+    <Description>A storage abstraction for opaque binary content: IBlobStore, addressed by holder, blob space and key. The storage backend is chosen by the adapter registered.</Description>
+    <PackageTags>stellaegis;blobs;storage;object-storage</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
