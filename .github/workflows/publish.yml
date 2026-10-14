@@ -37,8 +37,9 @@ jobs:
           fi
 
       # Quality gate: the whole solution must build and its tests pass before anything is pushed.
+      # Tests run on Microsoft.Testing.Platform, which global.json selects for dotnet test.
       - name: Test
-        run: dotnet test Stellaegis.Blobs.slnx -c Release
+        run: dotnet test --solution Stellaegis.Blobs.slnx -c Release
 
       - name: Pack
         run: dotnet pack Stellaegis.Blobs.slnx -c Release

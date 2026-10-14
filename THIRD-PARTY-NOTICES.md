@@ -10,5 +10,5 @@ alongside them, each under its own license.
 | Microsoft.Extensions.\* | MIT | <https://github.com/dotnet> |
 | Stellaegis.Primitives | MIT | <https://github.com/Stellaegis/Stellaegis.Primitives> |
 
-Test-only dependencies (xUnit, Microsoft.NET.Test.Sdk) are not part of the packages and are not
+Test-only dependencies (xUnit) are not part of the packages and are not
 listed here.

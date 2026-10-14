@@ -228,8 +228,11 @@ all of which your application decides.
 ## Building and testing
 
 ```sh
-dotnet test Stellaegis.Blobs.slnx
+dotnet test --solution Stellaegis.Blobs.slnx
 ```
+
+The tests run on Microsoft.Testing.Platform, which `global.json` selects for `dotnet test`. That
+mode needs the .NET 10 SDK and the `--solution` option.
 
 The tests need no external service. The filesystem tests write under the system's temporary
 directory and remove what they write.
