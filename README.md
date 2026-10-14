@@ -20,28 +20,60 @@ dotnet add package Stellaegis.Blobs.FileSystem
 
 The adapter package depends on `Stellaegis.Blobs`, so this one command installs both.
 
-## Addressing a blob: holder, space and key
+## Addressing a blob: compartment, space and key
 
 A `BlobLocation` has three parts.
 
-- **The holder** is the party the blob belongs to: a customer, an organization, a tenant, whatever
-  your application partitions its data by. The empty string, available as `BlobLocation.Platform`,
-  designates content that belongs to the application itself rather than to one of its holders, such
-  as a default template.
+- **The compartment** is the access boundary the blob belongs to: a customer, an organization, a
+  tenant, whatever your application partitions its data by. It is a `Compartment`, a type from
+  [Stellaegis.Primitives](https://github.com/Stellaegis/Stellaegis.Primitives) that your application
+  creates from its own identifiers.
 - **The space** (`Name`) groups blobs of one kind: `invoices`, `templates`, `archive`. The library
   defines no space; your application chooses its own names.
 - **The key** is the path of the blob within its space, such as `invoice.pdf` or
   `2026/06/08/3f2a.pdf`. Segments are separated by forward slashes.
 
 ```csharp
-var invoice = new BlobLocation("acme", "invoices", "2026/06/08/3f2a.pdf");
-var template = BlobLocation.ForPlatform("templates", "invoice.scriban");
-
-template.IsPlatform; // true
+var acme = Compartment.Parse("acme");
+var invoice = new BlobLocation(acme, "invoices", "2026/06/08/3f2a.pdf");
 ```
 
-Each holder and space pair is isolated from the others: the same key under two holders, or under a
-holder and the platform, designates two different blobs.
+Each compartment and space pair is isolated from the others: the same key under two compartments
+designates two different blobs.
+
+### Content that belongs to no compartment: the shared space
+
+Some content belongs to the application as a whole rather than to one compartment: a default
+template, a document shared by every customer. It lives in the shared space, reached through
+`BlobLocation.Shared`:
+
+```csharp
+var template = BlobLocation.Shared("templates", "invoice.scriban");
+
+template.IsShared;    // true
+template.Compartment; // null
+```
+
+The shared space is a case of its own, not a compartment with a reserved name. No `Compartment`
+value can designate it, whatever name your application gives its compartments, and each adapter
+stores it under a physical name that no compartment can produce. A compartment named `shared` is an
+ordinary compartment, distinct from the shared space.
+
+The constructor refuses a `null` compartment with an `ArgumentNullException`, instead of reading it
+as the shared space. A compartment that your code failed to resolve, such as a missing route value,
+therefore fails loudly rather than reaching shared content. Reaching the shared space always takes an
+explicit call to `BlobLocation.Shared`.
+
+The alternative would be a compartment name reserved by convention, such as `platform`. It needs no
+special case in the library, but it holds only as long as every part of your application refuses
+that name as a real compartment. The shared space holds without that discipline, at the cost of a
+nullable `Compartment` property.
+
+If your application has a single compartment, name it once and use it everywhere:
+
+```csharp
+static readonly Compartment Main = Compartment.Parse("main");
+```
 
 A location holds no physical information: no provider, endpoint, container or credential. That
 information belongs to the adapter. As a result, a stored key stays valid when the backend changes,
@@ -54,7 +86,7 @@ one is invalid.
 
 | Part | Rule |
 | --- | --- |
-| holder | `BlobLocation.Platform` (empty), or 3 to 63 characters: a lowercase letter, then lowercase letters, digits and hyphens, with no two consecutive hyphens |
+| compartment | any `Compartment`, never `null`: 3 to 63 characters, a lowercase letter first, then lowercase letters, digits and single hyphens, ending with a letter or a digit. `Compartment.Parse` and `Compartment.TryParse` apply this rule |
 | space | 1 to 63 characters: a lowercase letter, then lowercase letters, digits and hyphens |
 | key | see below |
 
@@ -82,14 +114,14 @@ These rules make keys technical identifiers, built by your code: `2026/06/08/3f2
 accents and spaces as metadata stored beside the blob, typically in your database, and is given back
 at download time, for instance in the `Content-Disposition` header.
 
-The holder and space rules keep every pair on a distinct directory or container name, and the key
-rules keep a key inside its space (no path traversal). None of these rules is a business rule. If
-your application constrains its holder identifiers further, with a format of its own or reserved
-values, check that rule in your code before building a location. The library has no way to know it.
+The compartment and space rules keep every pair on a distinct directory or container name, and the
+key rules keep a key inside its space (no path traversal). None of these rules is a business rule. If
+your application constrains its space names further, check that rule in your code before building a
+location. The library has no way to know it.
 
 ## Reading and writing
 
-`IBlobStore` has five methods:
+`IBlobStore` has four methods:
 
 | Method | Behaviour |
 | --- | --- |
@@ -97,7 +129,6 @@ values, check that rule in your code before building a location. The library has
 | `OpenReadAsync(location)` | returns a readable stream, or `null` when no blob exists at that location |
 | `ExistsAsync(location)` | tells whether a blob exists at that location |
 | `DeleteAsync(location)` | deletes the blob; does nothing when there is none |
-| `TryGetDownloadUrlAsync(location, validity)` | returns a short-lived download URL, or `null` when the adapter cannot produce one |
 
 ```csharp
 await store.WriteAsync(invoice, pdfStream, cancellationToken);
@@ -118,25 +149,32 @@ store. Your code decides what an absent blob means: a missing optional file, or 
 with metadata that says the blob exists. Errors that are not about absence, such as a denied access
 or a full disk, are raised as exceptions by the adapter.
 
-`TryGetDownloadUrlAsync` lets a web application send a browser straight to the storage backend, with
-a pre-signed URL, instead of streaming the content through its own process. An adapter that cannot
-sign a URL returns `null`, and your code then streams the content with `OpenReadAsync`. The URL is
-not checked against the blob's existence: ask for one only for a blob your code has already
-authorized and knows to exist.
+### Serving content to a user
+
+The library stores and reads content; it does not serve it. To let a user download a blob, your
+application reads it with `OpenReadAsync` and writes it to the response itself, with the file name and
+content type it keeps as metadata. Every download therefore goes through your application, which
+checks access on each request and can record who downloaded what.
+
+The alternative is a pre-signed URL that sends the browser straight to the storage backend. It saves
+your application from relaying the bytes, but access is then granted by a signature and a lifetime
+rather than checked on each request, and a leaked URL stays valid until it expires. The library does
+not offer it. The bytes reach the browser in both cases, so relaying them costs your application's
+time and bandwidth, not extra transfer to the user.
 
 ## The filesystem adapter
 
-`FileSystemBlobStore` stores each blob as a file under a root directory. Each holder and space pair
-has its own directory:
+`FileSystemBlobStore` stores each blob as a file under a root directory, with one directory per
+compartment, and one per space inside it:
 
 ```text
-{root}/acme_invoices/2026/06/08/3f2a.pdf      holder "acme", space "invoices"
-{root}/_platform_templates/invoice.scriban    the platform, space "templates"
+{root}/acme/invoices/2026/06/08/3f2a.pdf      compartment "acme", space "invoices"
+{root}/_shared/templates/invoice.scriban      the shared space, space "templates"
 ```
 
-The underscore separates the holder from the space. Neither a holder nor a space name can contain an
-underscore, and a holder starts with a letter, so two locations never share a directory and no holder
-can reach the platform's directories.
+Everything a compartment holds sits under its own directory, so you can back it up, move it to
+another storage or erase it in one step. The shared space sits under `_shared`. A compartment starts
+with a letter, so no compartment can produce that directory.
 
 Register the adapter with `AddStellaegisFileSystemBlobStore`. It registers `FileSystemBlobStore` as
 the singleton `IBlobStore`; a second call keeps the first registration.
@@ -166,24 +204,26 @@ builder.Services.AddStellaegisFileSystemBlobStore(
 relative path is resolved against the process's current directory when the store is created.
 Directories are created on the first write and are not removed when their last blob is deleted.
 
-The adapter suits development, tests and applications that run on a single machine. It cannot sign
-download URLs, so `TryGetDownloadUrlAsync` always returns `null`. The key rules above already keep
-out what Windows or Linux would refuse. The remaining limit is the total path length: the root
-directory, the holder and space directory and the key add up, and a file system or a tool that still
+The adapter suits development, tests and applications that run on a single machine. The stream
+`OpenReadAsync` returns is a file stream, so it supports seeking, which serving a byte range
+requires. The key rules above already keep out what Windows or Linux would refuse. The remaining
+limit is the total path length: the root directory, the compartment and space directories and the
+key add up, and a file system or a tool that still
 caps paths at 260 characters on Windows can refuse a long one. Choose a short root if your keys are
 long.
 
-## One storage per holder
+## One storage per compartment
 
-Because a location carries the holder and nothing physical, an `IBlobStore` can send each holder to a
-storage of its own. This is how a holder can bring its own storage account: your implementation of
-`IBlobStore` looks up the storage configured for `location.Holder`, then delegates to an adapter
-created for that storage. The keys your application stores do not change when a holder moves from one
-storage to another; only the content has to be copied.
+Because a location carries the compartment and nothing physical, an `IBlobStore` can send each
+compartment to a storage of its own. This is how a customer can bring its own storage account: your
+implementation of `IBlobStore` looks up the storage configured for `location.Compartment`, then
+delegates to an adapter created for that storage. A shared location has no compartment, so your
+implementation sends it to a storage of your choice. The keys your application stores do not change
+when a compartment moves from one storage to another; only the content has to be copied.
 
-The library does not provide this routing. It depends on where your application keeps each holder's
-storage settings and credentials, and on how long it keeps an adapter per holder, all of which your
-application decides.
+The library does not provide this routing. It depends on where your application keeps each
+compartment's storage settings and credentials, and on how long it keeps an adapter per compartment,
+all of which your application decides.
 
 ## Building and testing
 
