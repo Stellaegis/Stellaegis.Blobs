@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] — 2026-10-14
+
+Brings the dependencies up to date, starting with Stellaegis.Primitives 2.0.0. The API of this library
+does not change.
+
+### Changed
+
+- Depends on Stellaegis.Primitives 2.0.0. Its API breaks are in Stellaegis.Primitives.AspNetCore, which
+  this library does not use. Its new `Space` type names the shared space `Space.Shared`, the notion
+  `BlobLocation.Shared` holds; the README shows how to build a location from a `Space`.
+- `IsShared` tells the nullable analysis that `Compartment` is not `null` when it is `false`.
+
+### Updating from 2.0.0
+
+- Your project resolves Stellaegis.Primitives 2.0.0 or later. If it references
+  Stellaegis.Primitives.AspNetCore, follow that package's changelog for 2.0.0.
+
 ## [2.0.0] — 2026-10-14
 
 A blob now belongs to a `Compartment`, from Stellaegis.Primitives 1.1.0, or to the shared space, and
