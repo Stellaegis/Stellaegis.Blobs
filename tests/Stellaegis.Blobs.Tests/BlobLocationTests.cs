@@ -1,59 +1,54 @@
+using Stellaegis.Primitives;
 using Xunit;
 
 namespace Stellaegis.Blobs.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="BlobLocation"/>: the holder, space name and key grammars, and the platform value.
+/// Unit tests for <see cref="BlobLocation"/>: the compartment and the shared space, and the space name and key
+/// grammars. The compartment grammar belongs to <see cref="Compartment"/> and is tested with it.
 /// </summary>
 public sealed class BlobLocationTests
 {
-    [Theory]
-    [InlineData("acme")]
-    [InlineData("a1-b2")]
-    [InlineData("abc")]
-    [InlineData("a23456789012345678901234567890123456789012345678901234567890123")]
-    public void Valid_holder_is_accepted(string holder)
+    private static readonly Compartment Acme = Compartment.Parse("acme");
+
+    [Fact]
+    public void Compartment_is_kept()
     {
-        var location = new BlobLocation(holder, "files", "a.pdf");
+        var location = new BlobLocation(Acme, "files", "a.pdf");
 
-        Assert.Equal(holder, location.Holder);
-        Assert.False(location.IsPlatform);
-    }
-
-    [Theory]
-    [InlineData("ab")]
-    [InlineData("a234567890123456789012345678901234567890123456789012345678901234")]
-    [InlineData("Acme")]
-    [InlineData("1acme")]
-    [InlineData("-acme")]
-    [InlineData("ac--me")]
-    [InlineData("ac_me")]
-    [InlineData("ac/me")]
-    [InlineData(" ")]
-    public void Invalid_holder_is_refused(string holder)
-    {
-        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation(holder, "files", "a.pdf"));
-
-        Assert.Equal("holder", exception.ParamName);
+        Assert.Equal(Acme, location.Compartment);
+        Assert.False(location.IsShared);
     }
 
     [Fact]
-    public void Null_holder_is_refused()
+    public void Missing_compartment_is_refused_rather_than_read_as_shared()
     {
         var exception = Assert.Throws<ArgumentNullException>(() => new BlobLocation(null!, "files", "a.pdf"));
 
-        Assert.Equal("holder", exception.ParamName);
+        Assert.Equal("compartment", exception.ParamName);
     }
 
     [Fact]
-    public void Platform_is_the_empty_holder()
+    public void Shared_location_has_no_compartment()
     {
-        var location = BlobLocation.ForPlatform("files", "a.pdf");
+        var location = BlobLocation.Shared("files", "a.pdf");
 
-        Assert.Equal(BlobLocation.Platform, location.Holder);
-        Assert.Equal("", location.Holder);
-        Assert.True(location.IsPlatform);
-        Assert.Equal(location, new BlobLocation("", "files", "a.pdf"));
+        Assert.Null(location.Compartment);
+        Assert.True(location.IsShared);
+        Assert.Equal(location, BlobLocation.Shared("files", "a.pdf"));
+    }
+
+    [Fact]
+    public void Shared_space_differs_from_a_compartment_named_shared()
+        => Assert.NotEqual(
+            BlobLocation.Shared("files", "a.pdf"),
+            new BlobLocation(Compartment.Parse("shared"), "files", "a.pdf"));
+
+    [Fact]
+    public void Shared_location_validates_its_space_name_and_key()
+    {
+        Assert.Equal("name", Assert.Throws<ArgumentException>(() => BlobLocation.Shared("Files", "a.pdf")).ParamName);
+        Assert.Equal("key", Assert.Throws<ArgumentException>(() => BlobLocation.Shared("files", "../a.pdf")).ParamName);
     }
 
     [Theory]
@@ -61,7 +56,7 @@ public sealed class BlobLocationTests
     [InlineData("files")]
     [InlineData("ged-2")]
     public void Valid_space_name_is_accepted(string name)
-        => Assert.Equal(name, new BlobLocation("acme", name, "a.pdf").Name);
+        => Assert.Equal(name, new BlobLocation(Acme, name, "a.pdf").Name);
 
     [Theory]
     [InlineData("")]
@@ -72,7 +67,7 @@ public sealed class BlobLocationTests
     [InlineData("my/files")]
     public void Invalid_space_name_is_refused(string name)
     {
-        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation("acme", name, "a.pdf"));
+        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, name, "a.pdf"));
 
         Assert.Equal("name", exception.ParamName);
     }
@@ -80,8 +75,8 @@ public sealed class BlobLocationTests
     [Fact]
     public void Space_name_is_at_most_63_characters()
     {
-        Assert.Equal(63, new BlobLocation("acme", "f" + new string('a', 62), "a.pdf").Name.Length);
-        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "f" + new string('a', 63), "a.pdf"));
+        Assert.Equal(63, new BlobLocation(Acme, "f" + new string('a', 62), "a.pdf").Name.Length);
+        Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "f" + new string('a', 63), "a.pdf"));
     }
 
     [Theory]
@@ -92,7 +87,7 @@ public sealed class BlobLocationTests
     [InlineData("my file_v2 (final)+#@=,;!~.pdf")]
     [InlineData("console/nullable/com10/lpt.txt/con-1")]
     public void Valid_key_is_accepted(string key)
-        => Assert.Equal(key, new BlobLocation("acme", "files", key).Key);
+        => Assert.Equal(key, new BlobLocation(Acme, "files", key).Key);
 
     [Theory]
     [InlineData("")]
@@ -107,7 +102,7 @@ public sealed class BlobLocationTests
     [InlineData("..")]
     public void Key_escaping_its_space_is_refused(string key)
     {
-        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", key));
 
         Assert.Equal("key", exception.ParamName);
     }
@@ -126,7 +121,7 @@ public sealed class BlobLocationTests
     [InlineData("a\u007fb.pdf")]
     public void Key_with_a_character_some_backend_refuses_is_refused(string key)
     {
-        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+        var exception = Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", key));
 
         Assert.Equal("key", exception.ParamName);
     }
@@ -137,7 +132,7 @@ public sealed class BlobLocationTests
     [InlineData("a /b.pdf")]
     [InlineData("a.pdf ")]
     public void Segment_ending_with_a_dot_or_a_space_is_refused(string key)
-        => Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+        => Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", key));
 
     [Theory]
     [InlineData("con")]
@@ -151,19 +146,19 @@ public sealed class BlobLocationTests
     [InlineData("dir/aux.pdf")]
     [InlineData("nul .txt")]
     public void Windows_device_name_is_refused(string key)
-        => Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", key));
+        => Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", key));
 
     [Fact]
     public void Key_length_is_bounded_overall_and_per_segment()
     {
         var segment = new string('a', BlobLocation.MaxSegmentLength);
-        Assert.Equal(segment, new BlobLocation("acme", "files", segment).Key);
-        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", segment + "a"));
+        Assert.Equal(segment, new BlobLocation(Acme, "files", segment).Key);
+        Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", segment + "a"));
 
         // Three 255-character segments, one of 254 and a last of 1, with four slashes: exactly 1024 characters.
         var atLimit = string.Join('/', segment, segment, segment, segment[..254]) + "/a";
         Assert.Equal(BlobLocation.MaxKeyLength, atLimit.Length);
-        Assert.Equal(atLimit, new BlobLocation("acme", "files", atLimit).Key);
-        Assert.Throws<ArgumentException>(() => new BlobLocation("acme", "files", atLimit + "a"));
+        Assert.Equal(atLimit, new BlobLocation(Acme, "files", atLimit).Key);
+        Assert.Throws<ArgumentException>(() => new BlobLocation(Acme, "files", atLimit + "a"));
     }
 }

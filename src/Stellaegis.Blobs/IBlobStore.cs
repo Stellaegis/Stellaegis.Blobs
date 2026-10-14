@@ -1,7 +1,7 @@
 namespace Stellaegis.Blobs;
 
 /// <summary>
-/// Stores and retrieves opaque binary content, isolated per holder and blob space
+/// Stores and retrieves opaque binary content, isolated per compartment and blob space
 /// (see <see cref="BlobLocation"/>). One abstraction, with the storage backend chosen by the adapter
 /// registered.
 /// </summary>
@@ -9,6 +9,15 @@ namespace Stellaegis.Blobs;
 /// <para>
 /// A blob store is a <b>library, not a hosted service</b>: bytes flow directly between the consuming
 /// code and the storage backend.
+/// </para>
+/// <para>
+/// A blob store knows nothing of what it stores, nor of how the content reaches a user: serving it,
+/// with its file name and type, is the job of the consumer, which reads it through
+/// <see cref="OpenReadAsync"/>.
+/// </para>
+/// <para>
+/// An implementation gives the shared space (<see cref="BlobLocation.IsShared"/>) a physical name that no
+/// compartment can produce, so that no compartment ever reaches shared content.
 /// </para>
 /// <para>Implementations must never log blob content.</para>
 /// </remarks>
@@ -29,19 +38,4 @@ public interface IBlobStore
 
     /// <summary>Deletes the blob at <paramref name="location"/>. No-op if it does not exist.</summary>
     Task DeleteAsync(BlobLocation location, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Tries to produce a short-lived, directly downloadable URL for the blob at <paramref name="location"/>,
-    /// valid for <paramref name="validity"/> — letting bytes flow straight between the browser and the storage
-    /// backend (a pre-signed S3/Azure URL) instead of streaming through the host.
-    /// </summary>
-    /// <returns>
-    /// The download URL, or <see langword="null"/> when the adapter cannot pre-sign (e.g. the filesystem
-    /// adapter): the caller must then stream the content via <see cref="OpenReadAsync"/>.
-    /// </returns>
-    /// <remarks>
-    /// A returned URL is not checked for existence — callers should only request one for a blob they have
-    /// already authorized and whose metadata proves it exists.
-    /// </remarks>
-    Task<Uri?> TryGetDownloadUrlAsync(BlobLocation location, TimeSpan validity, CancellationToken cancellationToken = default);
 }

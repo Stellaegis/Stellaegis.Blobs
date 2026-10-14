@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Stellaegis.Blobs.FileSystem;
+using Stellaegis.Primitives;
 using Xunit;
 
 namespace Stellaegis.Blobs.Tests;
@@ -12,6 +13,9 @@ namespace Stellaegis.Blobs.Tests;
 /// </summary>
 public sealed class FileSystemBlobStoreTests : IDisposable
 {
+    private static readonly Compartment Acme = Compartment.Parse("acme");
+    private static readonly Compartment Globex = Compartment.Parse("globex");
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "stellaegis-blobs-tests", Guid.NewGuid().ToString("N"));
     private readonly FileSystemBlobStore _store;
 
@@ -27,7 +31,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Written_content_reads_back()
     {
-        var location = new BlobLocation("acme", "files", "2026/06/08/a.txt");
+        var location = new BlobLocation(Acme, "files", "2026/06/08/a.txt");
 
         await WriteAsync(location, "hello");
 
@@ -37,7 +41,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Writing_overwrites_the_previous_blob()
     {
-        var location = new BlobLocation("acme", "files", "a.txt");
+        var location = new BlobLocation(Acme, "files", "a.txt");
 
         await WriteAsync(location, "a longer first version");
         await WriteAsync(location, "second");
@@ -48,7 +52,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Absent_blob_reads_as_null()
     {
-        var location = new BlobLocation("acme", "files", "missing.txt");
+        var location = new BlobLocation(Acme, "files", "missing.txt");
 
         Assert.Null(await _store.OpenReadAsync(location, TestContext.Current.CancellationToken));
         Assert.False(await _store.ExistsAsync(location, TestContext.Current.CancellationToken));
@@ -57,7 +61,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Empty_blob_reads_as_an_empty_stream_not_as_null()
     {
-        var location = new BlobLocation("acme", "files", "empty.txt");
+        var location = new BlobLocation(Acme, "files", "empty.txt");
 
         await _store.WriteAsync(location, Stream.Null, TestContext.Current.CancellationToken);
 
@@ -70,7 +74,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Delete_removes_the_blob_and_ignores_an_absent_one()
     {
-        var location = new BlobLocation("acme", "files", "a.txt");
+        var location = new BlobLocation(Acme, "files", "a.txt");
         await WriteAsync(location, "hello");
 
         await _store.DeleteAsync(location, TestContext.Current.CancellationToken);
@@ -80,41 +84,37 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Same_key_is_isolated_by_holder_platform_and_space()
+    public async Task Same_key_is_isolated_by_compartment_shared_space_and_space()
     {
-        var acme = new BlobLocation("acme", "files", "a.txt");
-        var globex = new BlobLocation("globex", "files", "a.txt");
-        var platform = BlobLocation.ForPlatform("files", "a.txt");
-        var otherSpace = new BlobLocation("acme", "archive", "a.txt");
+        var acme = new BlobLocation(Acme, "files", "a.txt");
+        var globex = new BlobLocation(Globex, "files", "a.txt");
+        var shared = BlobLocation.Shared("files", "a.txt");
+        var namedShared = new BlobLocation(Compartment.Parse("shared"), "files", "a.txt");
+        var otherSpace = new BlobLocation(Acme, "archive", "a.txt");
 
         await WriteAsync(acme, "acme");
         await WriteAsync(globex, "globex");
-        await WriteAsync(platform, "platform");
+        await WriteAsync(shared, "shared");
+        await WriteAsync(namedShared, "named shared");
         await WriteAsync(otherSpace, "archive");
 
         Assert.Equal("acme", await ReadAsync(acme));
         Assert.Equal("globex", await ReadAsync(globex));
-        Assert.Equal("platform", await ReadAsync(platform));
+        Assert.Equal("shared", await ReadAsync(shared));
+        Assert.Equal("named shared", await ReadAsync(namedShared));
         Assert.Equal("archive", await ReadAsync(otherSpace));
     }
 
     [Fact]
-    public async Task Spaces_map_to_holder_and_platform_directories()
+    public async Task Spaces_map_to_compartment_and_shared_directories()
     {
-        await WriteAsync(new BlobLocation("acme", "files", "dir/a.txt"), "acme");
-        await WriteAsync(BlobLocation.ForPlatform("files", "a.txt"), "platform");
+        await WriteAsync(new BlobLocation(Acme, "files", "dir/a.txt"), "acme");
+        await WriteAsync(new BlobLocation(Compartment.Parse("shared"), "files", "a.txt"), "named shared");
+        await WriteAsync(BlobLocation.Shared("files", "a.txt"), "shared");
 
         Assert.True(File.Exists(Path.Combine(_root, "acme_files", "dir", "a.txt")));
-        Assert.True(File.Exists(Path.Combine(_root, "_platform_files", "a.txt")));
-    }
-
-    [Fact]
-    public async Task Download_url_is_never_offered()
-    {
-        var location = new BlobLocation("acme", "files", "a.txt");
-        await WriteAsync(location, "hello");
-
-        Assert.Null(await _store.TryGetDownloadUrlAsync(location, TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken));
+        Assert.True(File.Exists(Path.Combine(_root, "shared_files", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "_shared_files", "a.txt")));
     }
 
     [Theory]

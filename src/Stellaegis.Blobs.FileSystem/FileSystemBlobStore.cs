@@ -5,14 +5,14 @@ namespace Stellaegis.Blobs.FileSystem;
 
 /// <summary>
 /// Filesystem implementation of <see cref="IBlobStore"/> for development. Each blob space maps to a
-/// directory under the configured root: <c>{root}/{holder}_{name}</c> for a holder, or
-/// <c>{root}/_platform_{name}</c> for the platform's own space. A holder starts with a letter and a
-/// holder or a space name never contains <c>_</c>, so no two locations share a directory and the
-/// platform's leading underscore can never be produced by a holder.
+/// directory under the configured root: <c>{root}/{compartment}_{name}</c> for a compartment, or
+/// <c>{root}/_shared_{name}</c> for the shared space. A compartment starts with a letter and neither a
+/// compartment nor a space name contains <c>_</c>, so no two locations share a directory and no
+/// compartment can produce the shared space's leading underscore.
 /// </summary>
 public sealed class FileSystemBlobStore : IBlobStore
 {
-    private const string PlatformContainerPrefix = "_platform_";
+    private const string SharedContainerPrefix = "_shared_";
 
     private readonly string _root;
     private readonly ILogger<FileSystemBlobStore> _logger;
@@ -71,13 +71,10 @@ public sealed class FileSystemBlobStore : IBlobStore
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc />
-    /// <remarks>The filesystem adapter cannot pre-sign URLs — always returns <see langword="null"/> so the host streams.</remarks>
-    public Task<Uri?> TryGetDownloadUrlAsync(BlobLocation location, TimeSpan validity, CancellationToken cancellationToken = default)
-        => Task.FromResult<Uri?>(null);
-
     private static string Container(BlobLocation location)
-        => location.IsPlatform ? $"{PlatformContainerPrefix}{location.Name}" : $"{location.Holder}_{location.Name}";
+        => location.Compartment is { } compartment
+            ? $"{compartment.Value}_{location.Name}"
+            : $"{SharedContainerPrefix}{location.Name}";
 
     private string ResolvePath(BlobLocation location)
     {

@@ -5,9 +5,9 @@ namespace Stellaegis.Blobs;
 /// <summary>
 /// Addresses a blob by two stable, non-physical layers:
 /// <list type="bullet">
-///   <item><b>Where</b> — <see cref="Holder"/> (the party the blob belongs to, or <see cref="Platform"/>)
-///   and <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the space
-///   an adapter stores the blob in.</item>
+///   <item><b>Where</b> — <see cref="Compartment"/> (the compartment the blob belongs to, or none for the
+///   shared space) and <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the
+///   space an adapter stores the blob in.</item>
 ///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that space.</item>
 /// </list>
 /// The physical provider, endpoint, container and credentials are never part of a location: they belong
@@ -15,24 +15,24 @@ namespace Stellaegis.Blobs;
 /// and free of any secret.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Content that belongs to no compartment lives in the shared space, reached only through
+/// <see cref="Shared"/>. It is a case of its own rather than a reserved compartment, so no compartment can
+/// ever designate it, and a missing compartment is refused instead of falling into it.
+/// </para>
+/// <para>
 /// A location only enforces the grammar its adapters need to store a blob without collision or path
-/// traversal. Any further rule on a holder or a space name — a business format, reserved values — belongs
-/// to the consumer, which applies it before building a location.
+/// traversal. Any further rule on a space name belongs to the consumer, which applies it before building
+/// a location.
+/// </para>
 /// </remarks>
 public sealed partial record BlobLocation
 {
     /// <summary>
-    /// The <see cref="Holder"/> value designating the platform itself rather than one of its holders.
-    /// It lies outside the holder grammar, so it never collides with a real holder.
+    /// The compartment the blob belongs to, or <see langword="null"/> for the shared space
+    /// (<see cref="IsShared"/>).
     /// </summary>
-    public const string Platform = "";
-
-    /// <summary>
-    /// The holder the blob belongs to, or <see cref="Platform"/> (empty string) for content owned by
-    /// the platform. A holder starts with a lowercase letter, followed by 2 to 62 lowercase letters,
-    /// digits or single hyphens.
-    /// </summary>
-    public string Holder { get; }
+    public Compartment? Compartment { get; }
 
     /// <summary>
     /// Blob space discriminant: a lowercase letter, followed by up to 62 lowercase letters, digits or hyphens.
@@ -40,7 +40,7 @@ public sealed partial record BlobLocation
     public string Name { get; }
 
     /// <summary>
-    /// Logical object key within the holder's blob space (e.g. <c>invoice.scriban</c>
+    /// Logical object key within the blob space (e.g. <c>invoice.scriban</c>
     /// or <c>2026/06/08/{id}.pdf</c>). Forward-slash separated, relative, never rooted.
     /// </summary>
     /// <remarks>
@@ -60,16 +60,18 @@ public sealed partial record BlobLocation
     /// <summary>The maximum length of one segment of a <see cref="Key"/>, in characters.</summary>
     public const int MaxSegmentLength = 255;
 
-    /// <summary>Creates a validated blob location.</summary>
-    /// <exception cref="ArgumentException">A segment is empty, malformed, or the key escapes its space.</exception>
-    public BlobLocation(string holder, string name, string key)
+    /// <summary>Creates a validated location in the space of <paramref name="compartment"/>.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="compartment"/>, <paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
+    public BlobLocation(Compartment compartment, string name, string key)
+        : this(name, key)
+        => Compartment = Guard.NotNull(compartment);
+
+    private BlobLocation(string name, string key)
     {
-        Guard.NotNull(holder);
         Guard.NotWhiteSpace(name);
         Guard.NotWhiteSpace(key);
 
-        Holder = Guard.Satisfies(holder, IsValidHolder,
-            $"'{holder}' is not a valid holder (or the platform value '').");
         Name = Guard.Satisfies(name, n => NameRegex().IsMatch(n),
             $"'{name}' is not a valid blob space name.");
         Key = Guard.Satisfies(key, IsValidKey,
@@ -78,15 +80,13 @@ public sealed partial record BlobLocation
             "no Windows device name, at most 1024 characters and 255 per segment).");
     }
 
-    /// <summary>Creates a location in the platform's own space (<see cref="Platform"/>).</summary>
-    public static BlobLocation ForPlatform(string name, string key) => new(Platform, name, key);
+    /// <summary>Creates a location in the shared space, which belongs to no compartment.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
+    public static BlobLocation Shared(string name, string key) => new(name, key);
 
-    /// <summary><see langword="true"/> when this location designates the platform's own space.</summary>
-    public bool IsPlatform => Holder.Length == 0;
-
-    /// <summary>Accepts <see cref="Platform"/> or a holder matching the grammar, without consecutive hyphens.</summary>
-    private static bool IsValidHolder(string holder)
-        => holder.Length == 0 || (HolderRegex().IsMatch(holder) && !holder.Contains("--", StringComparison.Ordinal));
+    /// <summary><see langword="true"/> when this location designates the shared space.</summary>
+    public bool IsShared => Compartment is null;
 
     /// <summary>
     /// Accepts a key every supported backend stores unchanged. Rooted paths, backslashes and <c>.</c> or
@@ -125,9 +125,6 @@ public sealed partial record BlobLocation
             || (stem.Length == 4 && (stem.StartsWith("com", StringComparison.Ordinal) || stem.StartsWith("lpt", StringComparison.Ordinal))
                 && stem[3] is >= '0' and <= '9');
     }
-
-    [GeneratedRegex("^[a-z][a-z0-9-]{2,62}$")]
-    private static partial Regex HolderRegex();
 
     [GeneratedRegex("^[a-z][a-z0-9-]{0,62}$")]
     private static partial Regex NameRegex();
