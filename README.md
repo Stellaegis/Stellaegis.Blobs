@@ -64,6 +64,19 @@ as the shared space. A compartment that your code failed to resolve, such as a m
 therefore fails loudly rather than reaching shared content. Reaching the shared space always takes an
 explicit call to `BlobLocation.Shared`.
 
+Stellaegis.Primitives 2.0 has the same notion, `Space.Shared`: a `Space` is a compartment or the
+shared space. A `Space` does not convert to a `BlobLocation`, nor the reverse. If your code receives a
+`Space`, it chooses the call itself:
+
+```csharp
+BlobLocation location = space.IsShared
+    ? BlobLocation.Shared("documents", key)
+    : new BlobLocation(space.Compartment, "documents", key);
+```
+
+In the other direction, `IsShared` tells the compiler when `Compartment` holds a value: after a test
+on `location.IsShared`, the nullable analysis knows that `location.Compartment` is not `null`.
+
 The alternative would be a compartment name reserved by convention, such as `platform`. It needs no
 special case in the library, but it holds only as long as every part of your application refuses
 that name as a real compartment. The shared space holds without that discipline, at the cost of a

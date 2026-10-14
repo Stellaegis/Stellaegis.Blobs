@@ -45,6 +45,28 @@ public sealed class BlobLocationTests
             new BlobLocation(Compartment.Parse("shared"), "files", "a.pdf"));
 
     [Fact]
+    public void Space_maps_to_the_same_compartment_or_to_the_shared_space()
+    {
+        Assert.Equal(new BlobLocation(Acme, "files", "a.pdf"), LocationIn(Acme));
+        Assert.Equal(BlobLocation.Shared("files", "a.pdf"), LocationIn(Space.Shared));
+
+        // The mapping the README shows: IsShared lets the compiler see Compartment as not null.
+        static BlobLocation LocationIn(Space space) => space.IsShared
+            ? BlobLocation.Shared("files", "a.pdf")
+            : new BlobLocation(space.Compartment, "files", "a.pdf");
+    }
+
+    [Fact]
+    public void Compartment_is_known_when_the_location_is_not_shared()
+    {
+        var location = new BlobLocation(Acme, "files", "a.pdf");
+
+        // No null-forgiving operator: IsShared carries the nullable annotation.
+        if (!location.IsShared)
+            Assert.Equal("acme", location.Compartment.Value);
+    }
+
+    [Fact]
     public void Shared_location_validates_its_space_name_and_key()
     {
         Assert.Equal("name", Assert.Throws<ArgumentException>(() => BlobLocation.Shared("Files", "a.pdf")).ParamName);

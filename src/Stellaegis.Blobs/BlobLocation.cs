@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace Stellaegis.Blobs;
@@ -19,6 +20,11 @@ namespace Stellaegis.Blobs;
 /// Content that belongs to no compartment lives in the shared space, reached only through
 /// <see cref="Shared"/>. It is a case of its own rather than a reserved compartment, so no compartment can
 /// ever designate it, and a missing compartment is refused instead of falling into it.
+/// </para>
+/// <para>
+/// It is the notion <see cref="Space.Shared"/> names in Stellaegis.Primitives, held here by
+/// <see cref="IsShared"/>. The two types do not convert into each other: a module that receives a
+/// <see cref="Space"/> chooses between the constructor and <see cref="Shared"/> itself.
 /// </para>
 /// <para>
 /// A location only enforces the grammar its adapters need to store a blob without collision or path
@@ -85,7 +91,11 @@ public sealed partial record BlobLocation
     /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
     public static BlobLocation Shared(string name, string key) => new(name, key);
 
-    /// <summary><see langword="true"/> when this location designates the shared space.</summary>
+    /// <summary>
+    /// <see langword="true"/> when this location designates the shared space. When it is
+    /// <see langword="false"/>, <see cref="Compartment"/> is not <see langword="null"/>.
+    /// </summary>
+    [MemberNotNullWhen(false, nameof(Compartment))]
     public bool IsShared => Compartment is null;
 
     /// <summary>
