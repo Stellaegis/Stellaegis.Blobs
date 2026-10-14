@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Blobs</RootNamespace>
     <PackageId>Stellaegis.Blobs</PackageId>
-    <Description>A storage abstraction for opaque binary content: IBlobStore, addressed by holder, blob space and key. The storage backend is chosen by the adapter registered.</Description>
+    <Description>A storage abstraction for opaque binary content: IBlobStore, addressed by compartment, blob space and key. The storage backend is chosen by the adapter registered.</Description>
     <PackageTags>stellaegis;blobs;storage;object-storage</PackageTags>
   </PropertyGroup>
 

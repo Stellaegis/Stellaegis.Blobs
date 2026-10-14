@@ -5,14 +5,14 @@ namespace Stellaegis.Blobs.FileSystem;
 
 /// <summary>
 /// Filesystem implementation of <see cref="IBlobStore"/> for development. Each blob space maps to a
-/// directory under the configured root: <c>{root}/{compartment}_{name}</c> for a compartment, or
-/// <c>{root}/_shared_{name}</c> for the shared space. A compartment starts with a letter and neither a
-/// compartment nor a space name contains <c>_</c>, so no two locations share a directory and no
-/// compartment can produce the shared space's leading underscore.
+/// directory under the configured root: <c>{root}/{compartment}/{name}</c> for a compartment, or
+/// <c>{root}/_shared/{name}</c> for the shared space. Everything a compartment holds therefore sits under
+/// one directory. A compartment starts with a letter, so none can produce the shared directory's leading
+/// underscore.
 /// </summary>
 public sealed class FileSystemBlobStore : IBlobStore
 {
-    private const string SharedContainerPrefix = "_shared_";
+    private const string SharedDirectory = "_shared";
 
     private readonly string _root;
     private readonly ILogger<FileSystemBlobStore> _logger;
@@ -73,8 +73,8 @@ public sealed class FileSystemBlobStore : IBlobStore
 
     private static string Container(BlobLocation location)
         => location.Compartment is { } compartment
-            ? $"{compartment.Value}_{location.Name}"
-            : $"{SharedContainerPrefix}{location.Name}";
+            ? $"{compartment.Value}/{location.Name}"
+            : $"{SharedDirectory}/{location.Name}";
 
     private string ResolvePath(BlobLocation location)
     {

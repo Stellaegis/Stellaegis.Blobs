@@ -10,7 +10,7 @@ public sealed class FileSystemBlobOptions
 
     /// <summary>
     /// Absolute root directory under which per-space containers are created
-    /// (<c>{root}/{compartment}_{name}</c>, or <c>{root}/_shared_{name}</c> for the shared space).
+    /// (<c>{root}/{compartment}/{name}</c>, or <c>{root}/_shared/{name}</c> for the shared space).
     /// </summary>
     public string RootPath { get; set; } = "";
 }

@@ -112,9 +112,9 @@ public sealed class FileSystemBlobStoreTests : IDisposable
         await WriteAsync(new BlobLocation(Compartment.Parse("shared"), "files", "a.txt"), "named shared");
         await WriteAsync(BlobLocation.Shared("files", "a.txt"), "shared");
 
-        Assert.True(File.Exists(Path.Combine(_root, "acme_files", "dir", "a.txt")));
-        Assert.True(File.Exists(Path.Combine(_root, "shared_files", "a.txt")));
-        Assert.True(File.Exists(Path.Combine(_root, "_shared_files", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "acme", "files", "dir", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "shared", "files", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "_shared", "files", "a.txt")));
     }
 
     [Theory]
