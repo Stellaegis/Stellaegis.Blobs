@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace Stellaegis.Blobs;
@@ -6,10 +5,10 @@ namespace Stellaegis.Blobs;
 /// <summary>
 /// Addresses a blob by two stable, non-physical layers:
 /// <list type="bullet">
-///   <item><b>Where</b> — <see cref="Compartment"/> (the compartment the blob belongs to, or none for the
-///   shared space) and <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the
-///   space an adapter stores the blob in.</item>
-///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that space.</item>
+///   <item><b>Where</b> — <see cref="Space"/> (the compartment the blob belongs to, or the shared space) and
+///   <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the container an
+///   adapter stores the blob in.</item>
+///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that container.</item>
 /// </list>
 /// The physical provider, endpoint, container and credentials are never part of a location: they belong
 /// to the <see cref="IBlobStore"/> implementation. This keeps stored keys stable across a backend migration
@@ -17,14 +16,11 @@ namespace Stellaegis.Blobs;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Content that belongs to no compartment lives in the shared space, reached only through
-/// <see cref="Shared"/>. It is a case of its own rather than a reserved compartment, so no compartment can
-/// ever designate it, and a missing compartment is refused instead of falling into it.
-/// </para>
-/// <para>
-/// It is the notion <see cref="Space.Shared"/> names in Stellaegis.Primitives, held here by
-/// <see cref="IsShared"/>. The two types do not convert into each other: a module that receives a
-/// <see cref="Space"/> chooses between the constructor and <see cref="Shared"/> itself.
+/// A <see cref="Compartment"/> converts to its <see cref="Primitives.Space"/>, so a location in a compartment
+/// is built from the compartment itself. Content that belongs to no compartment is built from
+/// <see cref="Primitives.Space.Shared"/>, which no compartment can designate. A missing space is refused
+/// instead of falling into the shared one: a <see langword="null"/> compartment converts to a
+/// <see langword="null"/> space, never to the shared space.
 /// </para>
 /// <para>
 /// A location only enforces the grammar its adapters need to store a blob without collision or path
@@ -35,10 +31,9 @@ namespace Stellaegis.Blobs;
 public sealed partial record BlobLocation
 {
     /// <summary>
-    /// The compartment the blob belongs to, or <see langword="null"/> for the shared space
-    /// (<see cref="IsShared"/>).
+    /// The space the blob belongs to: a compartment, or <see cref="Primitives.Space.Shared"/>.
     /// </summary>
-    public Compartment? Compartment { get; }
+    public Space Space { get; }
 
     /// <summary>
     /// Blob space discriminant: a lowercase letter, followed by up to 62 lowercase letters, digits or hyphens.
@@ -66,15 +61,12 @@ public sealed partial record BlobLocation
     /// <summary>The maximum length of one segment of a <see cref="Key"/>, in characters.</summary>
     public const int MaxSegmentLength = 255;
 
-    /// <summary>Creates a validated location in the space of <paramref name="compartment"/>.</summary>
-    /// <exception cref="ArgumentNullException"><paramref name="compartment"/>, <paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <summary>Creates a validated location in <paramref name="space"/>.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="space"/>, <paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
-    public BlobLocation(Compartment compartment, string name, string key)
-        : this(name, key)
-        => Compartment = Guard.NotNull(compartment);
-
-    private BlobLocation(string name, string key)
+    public BlobLocation(Space space, string name, string key)
     {
+        Space = Guard.NotNull(space);
         Guard.NotWhiteSpace(name);
         Guard.NotWhiteSpace(key);
 
@@ -85,18 +77,6 @@ public sealed partial record BlobLocation
             "without < > : \" | ? * \\, no empty segment, no segment ending with a dot or a space, " +
             "no Windows device name, at most 1024 characters and 255 per segment).");
     }
-
-    /// <summary>Creates a location in the shared space, which belongs to no compartment.</summary>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
-    public static BlobLocation Shared(string name, string key) => new(name, key);
-
-    /// <summary>
-    /// <see langword="true"/> when this location designates the shared space. When it is
-    /// <see langword="false"/>, <see cref="Compartment"/> is not <see langword="null"/>.
-    /// </summary>
-    [MemberNotNullWhen(false, nameof(Compartment))]
-    public bool IsShared => Compartment is null;
 
     /// <summary>
     /// Accepts a key every supported backend stores unchanged. Rooted paths, backslashes and <c>.</c> or

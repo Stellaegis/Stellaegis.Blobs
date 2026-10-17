@@ -88,7 +88,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     {
         var acme = new BlobLocation(Acme, "files", "a.txt");
         var globex = new BlobLocation(Globex, "files", "a.txt");
-        var shared = BlobLocation.Shared("files", "a.txt");
+        var shared = new BlobLocation(Space.Shared, "files", "a.txt");
         var namedShared = new BlobLocation(Compartment.Parse("shared"), "files", "a.txt");
         var otherSpace = new BlobLocation(Acme, "archive", "a.txt");
 
@@ -110,8 +110,10 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     {
         await WriteAsync(new BlobLocation(Acme, "files", "dir/a.txt"), "acme");
         await WriteAsync(new BlobLocation(Compartment.Parse("shared"), "files", "a.txt"), "named shared");
-        await WriteAsync(BlobLocation.Shared("files", "a.txt"), "shared");
+        await WriteAsync(new BlobLocation(Space.Shared, "files", "a.txt"), "shared");
 
+        // Literal paths, not Space.ToSegment(): the layout is data already on disk, and a change of the projection
+        // in Stellaegis.Primitives must fail here before it moves anything.
         Assert.True(File.Exists(Path.Combine(_root, "acme", "files", "dir", "a.txt")));
         Assert.True(File.Exists(Path.Combine(_root, "shared", "files", "a.txt")));
         Assert.True(File.Exists(Path.Combine(_root, "_shared", "files", "a.txt")));

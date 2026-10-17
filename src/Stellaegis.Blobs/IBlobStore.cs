@@ -16,8 +16,10 @@ namespace Stellaegis.Blobs;
 /// <see cref="OpenReadAsync"/>.
 /// </para>
 /// <para>
-/// An implementation gives the shared space (<see cref="BlobLocation.IsShared"/>) a physical name that no
-/// compartment can produce, so that no compartment ever reaches shared content.
+/// An implementation gives the shared space (<see cref="Space.Shared"/>) a physical name that no
+/// compartment can produce, so that no compartment ever reaches shared content. Where the space is a
+/// segment of a path, <see cref="Space.ToSegment"/> is that name: the projection every Stellaegis module
+/// gives a space in an address.
 /// </para>
 /// <para>Implementations must never log blob content.</para>
 /// </remarks>

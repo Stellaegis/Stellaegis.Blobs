@@ -4,73 +4,61 @@ using Xunit;
 namespace Stellaegis.Blobs.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="BlobLocation"/>: the compartment and the shared space, and the space name and key
-/// grammars. The compartment grammar belongs to <see cref="Compartment"/> and is tested with it.
+/// Unit tests for <see cref="BlobLocation"/>: its space, a compartment or the shared space, and the space name and
+/// key grammars. The compartment grammar belongs to <see cref="Compartment"/> and is tested with it.
 /// </summary>
 public sealed class BlobLocationTests
 {
     private static readonly Compartment Acme = Compartment.Parse("acme");
 
     [Fact]
-    public void Compartment_is_kept()
+    public void Compartment_converts_to_its_space()
     {
         var location = new BlobLocation(Acme, "files", "a.pdf");
 
-        Assert.Equal(Acme, location.Compartment);
-        Assert.False(location.IsShared);
+        Assert.Equal(Space.Of(Acme), location.Space);
+        Assert.Equal(Acme, location.Space.Compartment);
+        Assert.False(location.Space.IsShared);
+    }
+
+    [Fact]
+    public void Missing_space_is_refused_rather_than_read_as_shared()
+    {
+        var exception = Assert.Throws<ArgumentNullException>(() => new BlobLocation(null!, "files", "a.pdf"));
+
+        Assert.Equal("space", exception.ParamName);
     }
 
     [Fact]
     public void Missing_compartment_is_refused_rather_than_read_as_shared()
     {
-        var exception = Assert.Throws<ArgumentNullException>(() => new BlobLocation(null!, "files", "a.pdf"));
+        // A compartment that could not be resolved converts to a null space, never to the shared one.
+        Compartment unresolved = null!;
 
-        Assert.Equal("compartment", exception.ParamName);
+        Assert.Throws<ArgumentNullException>(() => new BlobLocation(unresolved, "files", "a.pdf"));
     }
 
     [Fact]
     public void Shared_location_has_no_compartment()
     {
-        var location = BlobLocation.Shared("files", "a.pdf");
+        var location = new BlobLocation(Space.Shared, "files", "a.pdf");
 
-        Assert.Null(location.Compartment);
-        Assert.True(location.IsShared);
-        Assert.Equal(location, BlobLocation.Shared("files", "a.pdf"));
+        Assert.True(location.Space.IsShared);
+        Assert.Null(location.Space.Compartment);
+        Assert.Equal(location, new BlobLocation(Space.Shared, "files", "a.pdf"));
     }
 
     [Fact]
     public void Shared_space_differs_from_a_compartment_named_shared()
         => Assert.NotEqual(
-            BlobLocation.Shared("files", "a.pdf"),
+            new BlobLocation(Space.Shared, "files", "a.pdf"),
             new BlobLocation(Compartment.Parse("shared"), "files", "a.pdf"));
-
-    [Fact]
-    public void Space_maps_to_the_same_compartment_or_to_the_shared_space()
-    {
-        Assert.Equal(new BlobLocation(Acme, "files", "a.pdf"), LocationIn(Acme));
-        Assert.Equal(BlobLocation.Shared("files", "a.pdf"), LocationIn(Space.Shared));
-
-        // The mapping the README shows: IsShared lets the compiler see Compartment as not null.
-        static BlobLocation LocationIn(Space space) => space.IsShared
-            ? BlobLocation.Shared("files", "a.pdf")
-            : new BlobLocation(space.Compartment, "files", "a.pdf");
-    }
-
-    [Fact]
-    public void Compartment_is_known_when_the_location_is_not_shared()
-    {
-        var location = new BlobLocation(Acme, "files", "a.pdf");
-
-        // No null-forgiving operator: IsShared carries the nullable annotation.
-        if (!location.IsShared)
-            Assert.Equal("acme", location.Compartment.Value);
-    }
 
     [Fact]
     public void Shared_location_validates_its_space_name_and_key()
     {
-        Assert.Equal("name", Assert.Throws<ArgumentException>(() => BlobLocation.Shared("Files", "a.pdf")).ParamName);
-        Assert.Equal("key", Assert.Throws<ArgumentException>(() => BlobLocation.Shared("files", "../a.pdf")).ParamName);
+        Assert.Equal("name", Assert.Throws<ArgumentException>(() => new BlobLocation(Space.Shared, "Files", "a.pdf")).ParamName);
+        Assert.Equal("key", Assert.Throws<ArgumentException>(() => new BlobLocation(Space.Shared, "files", "../a.pdf")).ParamName);
     }
 
     [Theory]
