@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Blobs.FileSystem</RootNamespace>
     <PackageId>Stellaegis.Blobs.FileSystem</PackageId>
-    <Description>Filesystem adapter for Stellaegis.Blobs: one directory per compartment and blob space under a configured root. Suited to development and single-machine deployments.</Description>
+    <Description>Filesystem adapter for Stellaegis.Blobs: one directory per compartment, and one for the shared space, under a configured root. Suited to development and single-machine deployments.</Description>
     <PackageTags>stellaegis;blobs;storage;filesystem</PackageTags>
   </PropertyGroup>
 

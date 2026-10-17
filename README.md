@@ -20,38 +20,36 @@ dotnet add package Stellaegis.Blobs.FileSystem
 
 The adapter package depends on `Stellaegis.Blobs`, so this one command installs both.
 
-## Addressing a blob: compartment, space and key
+## Addressing a blob: space and key
 
-A `BlobLocation` has three parts.
+A `BlobLocation` has two parts.
 
-- **The compartment** is the access boundary the blob belongs to: a customer, an organization, a
-  tenant, whatever your application partitions its data by. It is a `Compartment`, a type from
-  [Stellaegis.Primitives](https://github.com/Stellaegis/Stellaegis.Primitives) that your application
-  creates from its own identifiers.
-- **The space** (`Name`) groups blobs of one kind: `invoices`, `templates`, `archive`. The library
-  defines no space; your application chooses its own names.
-- **The key** is the path of the blob within its space, such as `invoice.pdf` or
-  `2026/06/08/3f2a.pdf`. Segments are separated by forward slashes.
+- **The space** is where the blob belongs. It is a `Space`, a type from
+  [Stellaegis.Primitives](https://github.com/Stellaegis/Stellaegis.Primitives): either a compartment
+  or the shared space. A compartment is the boundary your application isolates its data by: a
+  customer, an organization, a tenant. What is in one compartment is invisible from another. Your
+  application creates each `Compartment` from its own identifiers.
+- **The key** is the path of the blob within its space, such as `invoices/2026/06/08/3f2a.pdf`.
+  Segments are separated by forward slashes.
 
 ```csharp
 var acme = Compartment.Parse("acme");
-var invoice = new BlobLocation(acme, "invoices", "2026/06/08/3f2a.pdf");
+var invoice = new BlobLocation(acme, "invoices/2026/06/08/3f2a.pdf");
 ```
 
-Each compartment and space pair is isolated from the others: the same key under two compartments
-designates two different blobs.
+A `Compartment` converts to its `Space`, so you pass the compartment itself. The same key in two
+compartments designates two different blobs.
 
 ### Content that belongs to no compartment: the shared space
 
 Some content belongs to the application as a whole rather than to one compartment: a default
-template, a document shared by every customer. It lives in the shared space, reached through
-`BlobLocation.Shared`:
+template, a document shared by every customer. It lives in the shared space, `Space.Shared`:
 
 ```csharp
-var template = BlobLocation.Shared("templates", "invoice.scriban");
+var template = new BlobLocation(Space.Shared, "templates/invoice.scriban");
 
-template.IsShared;    // true
-template.Compartment; // null
+template.Space.IsShared;    // true
+template.Space.Compartment; // null
 ```
 
 The shared space is a case of its own, not a compartment with a reserved name. No `Compartment`
@@ -59,38 +57,55 @@ value can designate it, whatever name your application gives its compartments, a
 stores it under a physical name that no compartment can produce. A compartment named `shared` is an
 ordinary compartment, distinct from the shared space.
 
-The constructor refuses a `null` compartment with an `ArgumentNullException`, instead of reading it
-as the shared space. A compartment that your code failed to resolve, such as a missing route value,
-therefore fails loudly rather than reaching shared content. Reaching the shared space always takes an
-explicit call to `BlobLocation.Shared`.
-
-Stellaegis.Primitives 2.0 has the same notion, `Space.Shared`: a `Space` is a compartment or the
-shared space. A `Space` does not convert to a `BlobLocation`, nor the reverse. If your code receives a
-`Space`, it chooses the call itself:
-
-```csharp
-BlobLocation location = space.IsShared
-    ? BlobLocation.Shared("documents", key)
-    : new BlobLocation(space.Compartment, "documents", key);
-```
-
-In the other direction, `IsShared` tells the compiler when `Compartment` holds a value: after a test
-on `location.IsShared`, the nullable analysis knows that `location.Compartment` is not `null`.
+The constructor refuses a `null` space with an `ArgumentNullException`. A `null` compartment
+converts to a `null` space, never to the shared space. A compartment that your code failed to
+resolve, such as a missing route value, therefore fails loudly rather than reaching shared content.
+Reaching the shared space always takes an explicit `Space.Shared`.
 
 The alternative would be a compartment name reserved by convention, such as `platform`. It needs no
 special case in the library, but it holds only as long as every part of your application refuses
-that name as a real compartment. The shared space holds without that discipline, at the cost of a
-nullable `Compartment` property.
+that name as a real compartment. The shared space holds without that discipline, at the cost of
+passing a `Space` where a compartment alone would have been enough.
 
-If your application has a single compartment, name it once and use it everywhere:
+If your application has a single compartment, it is still a compartment. Name it after the
+organization that owns the data, once, and use it everywhere:
 
 ```csharp
-static readonly Compartment Main = Compartment.Parse("main");
+static readonly Compartment Acme = Compartment.Parse("acme");
 ```
+
+The day a second organization joins, the first keeps its name and its keys stay where they are. A
+placeholder such as `main` would then name one organization among several. Storing that data in the
+shared space instead would leave it outside every compartment once there are several.
 
 A location holds no physical information: no provider, endpoint, container or credential. That
 information belongs to the adapter. As a result, a stored key stays valid when the backend changes,
 and it never carries a secret.
+
+### Keeping kinds of content apart
+
+The library names no kind of content. Your application decides how to keep its invoices, its
+templates or its trash apart, in one of two ways, which can be combined.
+
+**A first key segment per kind of content, in one store**: `invoices/…`, `templates/…`, `trash/…`.
+Everything a compartment holds stays together: with the filesystem adapter, under one directory. The
+prefixes are a convention of your code, and nothing in the library stops two parts of your
+application from writing under the same one.
+
+**A store per kind of content.** Each part of your application receives its own `IBlobStore`, which
+can sit on a storage of its own: the trash on a cheaper, slower storage, for instance. Two stores
+never share a key. In return, what a compartment holds is spread over as many storages as there are
+stores. `AddStellaegisFileSystemBlobStore` registers a single store, so you register any further one
+yourself, for instance as a keyed service:
+
+```csharp
+builder.Services.AddKeyedSingleton<IBlobStore>("trash", (services, _) => new FileSystemBlobStore(
+    Options.Create(new FileSystemBlobOptions { RootPath = "/mnt/cold/blobs" }),
+    services.GetRequiredService<ILogger<FileSystemBlobStore>>()));
+```
+
+The part of your application that handles the trash then receives it with
+`[FromKeyedServices("trash")] IBlobStore store`.
 
 ### What a location accepts
 
@@ -99,8 +114,7 @@ one is invalid.
 
 | Part | Rule |
 | --- | --- |
-| compartment | any `Compartment`, never `null`: 3 to 63 characters, a lowercase letter first, then lowercase letters, digits and single hyphens, ending with a letter or a digit. `Compartment.Parse` and `Compartment.TryParse` apply this rule |
-| space | 1 to 63 characters: a lowercase letter, then lowercase letters, digits and hyphens |
+| space | any `Space`, never `null`. A compartment has 3 to 63 characters: a lowercase letter first, then lowercase letters, digits and single hyphens, ending with a letter or a digit. `Compartment.Parse` and `Compartment.TryParse` apply this rule |
 | key | see below |
 
 A key is made of segments separated by `/`. It is accepted when every supported backend can store it
@@ -127,10 +141,10 @@ These rules make keys technical identifiers, built by your code: `2026/06/08/3f2
 accents and spaces as metadata stored beside the blob, typically in your database, and is given back
 at download time, for instance in the `Content-Disposition` header.
 
-The compartment and space rules keep every pair on a distinct directory or container name, and the
-key rules keep a key inside its space (no path traversal). None of these rules is a business rule. If
-your application constrains its space names further, check that rule in your code before building a
-location. The library has no way to know it.
+The compartment rule keeps every space on a distinct directory or prefix, and the key rules keep a
+key inside its space (no path traversal). None of these rules is a business rule. If your
+application constrains its keys further, check that rule in your code before building a location.
+The library has no way to know it.
 
 ## Reading and writing
 
@@ -178,19 +192,28 @@ time and bandwidth, not extra transfer to the user.
 ## The filesystem adapter
 
 `FileSystemBlobStore` stores each blob as a file under a root directory, with one directory per
-compartment, and one per space inside it:
+space:
 
 ```text
-{root}/acme/invoices/2026/06/08/3f2a.pdf      compartment "acme", space "invoices"
-{root}/_shared/templates/invoice.scriban      the shared space, space "templates"
+{root}/acme/invoices/2026/06/08/3f2a.pdf      compartment "acme", key "invoices/2026/06/08/3f2a.pdf"
+{root}/_shared/templates/invoice.scriban      the shared space, key "templates/invoice.scriban"
 ```
 
 Everything a compartment holds sits under its own directory, so you can back it up, move it to
-another storage or erase it in one step. The shared space sits under `_shared`. A compartment starts
-with a letter, so no compartment can produce that directory.
+another storage or erase it in one step. The shared space sits under `_shared`, the name
+`Space.ToSegment()` gives it in every Stellaegis module. A compartment starts with a letter, so no
+compartment can produce that directory.
+
+A write goes to a temporary file in the blob's directory, which then replaces the blob by a rename.
+Within one directory, the rename is atomic: a reader sees the previous content or the new one in
+full, and a write that fails midway leaves the previous content in place. The temporary file is
+named `§` followed by a GUID and `.tmp`. The section sign is not ASCII, so no key can designate that
+file. A process stopped during a write can leave such a file behind. It is never read as a blob, and
+you can delete it.
 
 Register the adapter with `AddStellaegisFileSystemBlobStore`. It registers `FileSystemBlobStore` as
-the singleton `IBlobStore`; a second call keeps the first registration.
+the singleton `IBlobStore`; a second call keeps the first registration. To use several stores, see
+[Keeping kinds of content apart](#keeping-kinds-of-content-apart).
 
 ```csharp
 builder.Services.AddStellaegisFileSystemBlobStore(o => o.RootPath = "/var/lib/myapp/blobs");
@@ -220,8 +243,7 @@ Directories are created on the first write and are not removed when their last b
 The adapter suits development, tests and applications that run on a single machine. The stream
 `OpenReadAsync` returns is a file stream, so it supports seeking, which serving a byte range
 requires. The key rules above already keep out what Windows or Linux would refuse. The remaining
-limit is the total path length: the root directory, the compartment and space directories and the
-key add up, and a file system or a tool that still
+limit is the total path length: the root directory, the compartment directory and the key add up, and a file system or a tool that still
 caps paths at 260 characters on Windows can refuse a long one. Choose a short root if your keys are
 long.
 
@@ -229,7 +251,7 @@ long.
 
 Because a location carries the compartment and nothing physical, an `IBlobStore` can send each
 compartment to a storage of its own. This is how a customer can bring its own storage account: your
-implementation of `IBlobStore` looks up the storage configured for `location.Compartment`, then
+implementation of `IBlobStore` looks up the storage configured for `location.Space.Compartment`, then
 delegates to an adapter created for that storage. A shared location has no compartment, so your
 implementation sends it to a storage of your choice. The keys your application stores do not change
 when a compartment moves from one storage to another; only the content has to be copied.

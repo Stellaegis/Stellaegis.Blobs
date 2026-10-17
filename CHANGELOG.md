@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-10-17
+
+A blob is addressed by a `Space` from Stellaegis.Primitives 3.0.0 and a key: the blob space name is
+gone, and the filesystem adapter no longer loses the previous content when a write fails.
+
+### Changed
+
+- `BlobLocation` takes a `Space` and a key: `new BlobLocation(space, key)`. A `Compartment` converts
+  to its `Space`, so `new BlobLocation(compartment, key)` builds a location in a compartment, and
+  `new BlobLocation(Space.Shared, key)` one in the shared space. A `null` space, including one
+  converted from a `null` compartment, throws an `ArgumentNullException`.
+- `FileSystemBlobStore` stores a blob at `{root}/{compartment}/{key}`, or `{root}/_shared/{key}` for
+  the shared space. The first directory is `Space.ToSegment()`, the name every Stellaegis module
+  gives a space in an address.
+- Depends on Stellaegis.Primitives 3.0.0. Its API breaks are in Stellaegis.Primitives.AspNetCore,
+  which this library does not use.
+
+### Removed
+
+- `BlobLocation.Name`, the blob space. A first key segment does the same within one store, and a
+  store per kind of content can sit on a storage of its own: the README describes both.
+- `BlobLocation.Shared(name, key)`, `IsShared` and `Compartment`. Use `new BlobLocation(Space.Shared,
+  key)`, `Space.IsShared` and `Space.Compartment`.
+
+### Fixed
+
+- `FileSystemBlobStore.WriteAsync` emptied the existing file before copying the new content: a
+  concurrent reader could see a truncated blob, and a copy that failed midway lost the previous
+  content. The content is now written to a temporary file in the same directory, then renamed over
+  the blob. A failed write leaves the previous content in place and deletes its temporary file.
+
+### Updating from 2.0.1
+
+- Replace `new BlobLocation(compartment, name, key)` with `new BlobLocation(compartment,
+  $"{name}/{key}")`, and `BlobLocation.Shared(name, key)` with `new BlobLocation(Space.Shared,
+  $"{name}/{key}")`. Keeping the former name as the first key segment keeps the files where they
+  are with `FileSystemBlobStore`: the path `{root}/{compartment}/{name}/{key}` does not change.
+- Replace `location.IsShared` with `location.Space.IsShared`, and `location.Compartment` with
+  `location.Space.Compartment`.
+- Your project resolves Stellaegis.Primitives 3.0.0 or later. If it references
+  Stellaegis.Primitives.AspNetCore, follow that package's changelog for 3.0.0.
+
 ## [2.0.1] — 2026-10-14
 
 Brings the dependencies up to date, starting with Stellaegis.Primitives 2.0.0. The API of this library
