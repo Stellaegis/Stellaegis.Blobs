@@ -9,8 +9,8 @@ public sealed class FileSystemBlobOptions
     public const string SectionName = "Stellaegis:Blobs:FileSystem";
 
     /// <summary>
-    /// Absolute root directory under which per-space containers are created
-    /// (<c>{root}/{compartment}/{name}</c>, or <c>{root}/_shared/{name}</c> for the shared space).
+    /// Absolute root directory under which one directory per space is created
+    /// (<c>{root}/{compartment}</c>, or <c>{root}/_shared</c> for the shared space).
     /// </summary>
     public string RootPath { get; set; } = "";
 }

@@ -4,9 +4,9 @@ using Microsoft.Extensions.Options;
 namespace Stellaegis.Blobs.FileSystem;
 
 /// <summary>
-/// Filesystem implementation of <see cref="IBlobStore"/> for development. Each blob space maps to a
-/// directory under the configured root: <c>{root}/{compartment}/{name}</c> for a compartment, or
-/// <c>{root}/_shared/{name}</c> for the shared space. Everything a compartment holds therefore sits under
+/// Filesystem implementation of <see cref="IBlobStore"/> for development. Each space maps to a
+/// directory under the configured root: <c>{root}/{compartment}/{key}</c> for a compartment, or
+/// <c>{root}/_shared/{key}</c> for the shared space. Everything a compartment holds therefore sits under
 /// one directory. The first segment is <see cref="Space.ToSegment"/>, the projection every Stellaegis module
 /// gives a space in an address: no compartment can produce the shared directory's leading underscore.
 /// </summary>
@@ -65,7 +65,7 @@ public sealed class FileSystemBlobStore : IBlobStore
             throw;
         }
 
-        _logger.LogDebug("Wrote blob to {Container}/{Key}", Container(location), location.Key);
+        _logger.LogDebug("Wrote blob to {Space}/{Key}", location.Space.ToSegment(), location.Key);
     }
 
     /// <inheritdoc />
@@ -79,7 +79,7 @@ public sealed class FileSystemBlobStore : IBlobStore
         if (File.Exists(path))
         {
             File.Delete(path);
-            _logger.LogDebug("Deleted blob {Container}/{Key}", Container(location), location.Key);
+            _logger.LogDebug("Deleted blob {Space}/{Key}", location.Space.ToSegment(), location.Key);
         }
 
         return Task.CompletedTask;
@@ -94,21 +94,18 @@ public sealed class FileSystemBlobStore : IBlobStore
     /// </summary>
     internal static string TemporaryName(Guid id) => $"§{id:N}.tmp";
 
-    private static string Container(BlobLocation location)
-        => $"{location.Space.ToSegment()}/{location.Name}";
-
     private string ResolvePath(BlobLocation location)
     {
         Guard.NotNull(location);
 
-        var containerRoot = Path.GetFullPath(Path.Combine(_root, Container(location)));
-        var full = Path.GetFullPath(Path.Combine(containerRoot, Path.Combine(location.Key.Split('/'))));
+        var spaceRoot = Path.GetFullPath(Path.Combine(_root, location.Space.ToSegment()));
+        var full = Path.GetFullPath(Path.Combine(spaceRoot, Path.Combine(location.Key.Split('/'))));
 
         // Defence in depth: BlobLocation already rejects '..'/rooted keys, but never trust a path build.
-        if (full != containerRoot &&
-            !full.StartsWith(containerRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        if (full != spaceRoot &&
+            !full.StartsWith(spaceRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
-            throw new ArgumentException($"Resolved blob path escapes its container: '{location.Key}'.", nameof(location));
+            throw new ArgumentException($"Resolved blob path escapes its space: '{location.Key}'.", nameof(location));
         }
 
         return full;

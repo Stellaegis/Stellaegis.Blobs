@@ -1,14 +1,10 @@
-using System.Text.RegularExpressions;
-
 namespace Stellaegis.Blobs;
 
 /// <summary>
 /// Addresses a blob by two stable, non-physical layers:
 /// <list type="bullet">
-///   <item><b>Where</b> — <see cref="Space"/> (the compartment the blob belongs to, or the shared space) and
-///   <see cref="Name"/> (the blob space, chosen by the consumer). Together they select the container an
-///   adapter stores the blob in.</item>
-///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that container.</item>
+///   <item><b>Where</b> — <see cref="Space"/>, the compartment the blob belongs to, or the shared space.</item>
+///   <item><b>What</b> — <see cref="Key"/>, the logical object path <i>within</i> that space.</item>
 /// </list>
 /// The physical provider, endpoint, container and credentials are never part of a location: they belong
 /// to the <see cref="IBlobStore"/> implementation. This keeps stored keys stable across a backend migration
@@ -24,11 +20,12 @@ namespace Stellaegis.Blobs;
 /// </para>
 /// <para>
 /// A location only enforces the grammar its adapters need to store a blob without collision or path
-/// traversal. Any further rule on a space name belongs to the consumer, which applies it before building
-/// a location.
+/// traversal. How a consumer organizes its keys belongs to it: a first segment per kind of content, such as
+/// <c>invoices/</c> or <c>trash/</c>, or a store of its own for each kind, which may then sit on a storage of
+/// its own.
 /// </para>
 /// </remarks>
-public sealed partial record BlobLocation
+public sealed record BlobLocation
 {
     /// <summary>
     /// The space the blob belongs to: a compartment, or <see cref="Primitives.Space.Shared"/>.
@@ -36,13 +33,8 @@ public sealed partial record BlobLocation
     public Space Space { get; }
 
     /// <summary>
-    /// Blob space discriminant: a lowercase letter, followed by up to 62 lowercase letters, digits or hyphens.
-    /// </summary>
-    public string Name { get; }
-
-    /// <summary>
-    /// Logical object key within the blob space (e.g. <c>invoice.scriban</c>
-    /// or <c>2026/06/08/{id}.pdf</c>). Forward-slash separated, relative, never rooted.
+    /// Logical object key within the space (e.g. <c>templates/invoice.scriban</c>
+    /// or <c>invoices/2026/06/08/{id}.pdf</c>). Forward-slash separated, relative, never rooted.
     /// </summary>
     /// <remarks>
     /// A key is accepted only if every supported backend can store it unchanged: the file systems of Windows
@@ -62,16 +54,13 @@ public sealed partial record BlobLocation
     public const int MaxSegmentLength = 255;
 
     /// <summary>Creates a validated location in <paramref name="space"/>.</summary>
-    /// <exception cref="ArgumentNullException"><paramref name="space"/>, <paramref name="name"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The space name or the key is malformed, or the key escapes its space.</exception>
-    public BlobLocation(Space space, string name, string key)
+    /// <exception cref="ArgumentNullException"><paramref name="space"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The key is malformed, or escapes its space.</exception>
+    public BlobLocation(Space space, string key)
     {
         Space = Guard.NotNull(space);
-        Guard.NotWhiteSpace(name);
         Guard.NotWhiteSpace(key);
 
-        Name = Guard.Satisfies(name, n => NameRegex().IsMatch(n),
-            $"'{name}' is not a valid blob space name.");
         Key = Guard.Satisfies(key, IsValidKey,
             $"'{key}' is not a valid blob key (relative, forward-slash separated, lowercase printable ASCII " +
             "without < > : \" | ? * \\, no empty segment, no segment ending with a dot or a space, " +
@@ -115,7 +104,4 @@ public sealed partial record BlobLocation
             || (stem.Length == 4 && (stem.StartsWith("com", StringComparison.Ordinal) || stem.StartsWith("lpt", StringComparison.Ordinal))
                 && stem[3] is >= '0' and <= '9');
     }
-
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,62}$")]
-    private static partial Regex NameRegex();
 }

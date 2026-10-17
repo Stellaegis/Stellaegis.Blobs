@@ -31,7 +31,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Written_content_reads_back()
     {
-        var location = new BlobLocation(Acme, "files", "2026/06/08/a.txt");
+        var location = new BlobLocation(Acme, "2026/06/08/a.txt");
 
         await WriteAsync(location, "hello");
 
@@ -41,7 +41,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Writing_overwrites_the_previous_blob()
     {
-        var location = new BlobLocation(Acme, "files", "a.txt");
+        var location = new BlobLocation(Acme, "a.txt");
 
         await WriteAsync(location, "a longer first version");
         await WriteAsync(location, "second");
@@ -52,14 +52,14 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Failed_write_keeps_the_previous_blob_and_leaves_no_temporary_file()
     {
-        var location = new BlobLocation(Acme, "files", "a.txt");
+        var location = new BlobLocation(Acme, "a.txt");
         await WriteAsync(location, "previous");
 
         await Assert.ThrowsAsync<IOException>(() =>
             _store.WriteAsync(location, new FailingStream(), TestContext.Current.CancellationToken));
 
         Assert.Equal("previous", await ReadAsync(location));
-        Assert.Equal(["a.txt"], Directory.GetFiles(Path.Combine(_root, "acme", "files")).Select(Path.GetFileName));
+        Assert.Equal(["a.txt"], Directory.GetFiles(Path.Combine(_root, "acme")).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -70,9 +70,9 @@ public sealed class FileSystemBlobStoreTests : IDisposable
             Options.Create(new FileSystemBlobOptions { RootPath = _root }), NullLogger<FileSystemBlobStore>.Instance)
         { NewTemporaryId = () => id };
 
-        var location = new BlobLocation(Acme, "files", "a.txt");
+        var location = new BlobLocation(Acme, "a.txt");
         await WriteAsync(location, "previous");
-        var planted = Path.Combine(_root, "acme", "files", FileSystemBlobStore.TemporaryName(id));
+        var planted = Path.Combine(_root, "acme", FileSystemBlobStore.TemporaryName(id));
         await File.WriteAllTextAsync(planted, "planted", TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<IOException>(() =>
@@ -85,7 +85,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Key_with_a_segment_of_the_maximum_length_is_written()
     {
-        var location = new BlobLocation(Acme, "files", new string('a', BlobLocation.MaxSegmentLength));
+        var location = new BlobLocation(Acme, new string('a', BlobLocation.MaxSegmentLength));
 
         await WriteAsync(location, "hello");
 
@@ -95,7 +95,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Absent_blob_reads_as_null()
     {
-        var location = new BlobLocation(Acme, "files", "missing.txt");
+        var location = new BlobLocation(Acme, "missing.txt");
 
         Assert.Null(await _store.OpenReadAsync(location, TestContext.Current.CancellationToken));
         Assert.False(await _store.ExistsAsync(location, TestContext.Current.CancellationToken));
@@ -104,7 +104,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Empty_blob_reads_as_an_empty_stream_not_as_null()
     {
-        var location = new BlobLocation(Acme, "files", "empty.txt");
+        var location = new BlobLocation(Acme, "empty.txt");
 
         await _store.WriteAsync(location, Stream.Null, TestContext.Current.CancellationToken);
 
@@ -117,7 +117,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     [Fact]
     public async Task Delete_removes_the_blob_and_ignores_an_absent_one()
     {
-        var location = new BlobLocation(Acme, "files", "a.txt");
+        var location = new BlobLocation(Acme, "a.txt");
         await WriteAsync(location, "hello");
 
         await _store.DeleteAsync(location, TestContext.Current.CancellationToken);
@@ -127,39 +127,36 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Same_key_is_isolated_by_compartment_shared_space_and_space()
+    public async Task Same_key_is_isolated_by_compartment_and_shared_space()
     {
-        var acme = new BlobLocation(Acme, "files", "a.txt");
-        var globex = new BlobLocation(Globex, "files", "a.txt");
-        var shared = new BlobLocation(Space.Shared, "files", "a.txt");
-        var namedShared = new BlobLocation(Compartment.Parse("shared"), "files", "a.txt");
-        var otherSpace = new BlobLocation(Acme, "archive", "a.txt");
+        var acme = new BlobLocation(Acme, "a.txt");
+        var globex = new BlobLocation(Globex, "a.txt");
+        var shared = new BlobLocation(Space.Shared, "a.txt");
+        var namedShared = new BlobLocation(Compartment.Parse("shared"), "a.txt");
 
         await WriteAsync(acme, "acme");
         await WriteAsync(globex, "globex");
         await WriteAsync(shared, "shared");
         await WriteAsync(namedShared, "named shared");
-        await WriteAsync(otherSpace, "archive");
 
         Assert.Equal("acme", await ReadAsync(acme));
         Assert.Equal("globex", await ReadAsync(globex));
         Assert.Equal("shared", await ReadAsync(shared));
         Assert.Equal("named shared", await ReadAsync(namedShared));
-        Assert.Equal("archive", await ReadAsync(otherSpace));
     }
 
     [Fact]
     public async Task Spaces_map_to_compartment_and_shared_directories()
     {
-        await WriteAsync(new BlobLocation(Acme, "files", "dir/a.txt"), "acme");
-        await WriteAsync(new BlobLocation(Compartment.Parse("shared"), "files", "a.txt"), "named shared");
-        await WriteAsync(new BlobLocation(Space.Shared, "files", "a.txt"), "shared");
+        await WriteAsync(new BlobLocation(Acme, "dir/a.txt"), "acme");
+        await WriteAsync(new BlobLocation(Compartment.Parse("shared"), "a.txt"), "named shared");
+        await WriteAsync(new BlobLocation(Space.Shared, "a.txt"), "shared");
 
         // Literal paths, not Space.ToSegment(): the layout is data already on disk, and a change of the projection
         // in Stellaegis.Primitives must fail here before it moves anything.
-        Assert.True(File.Exists(Path.Combine(_root, "acme", "files", "dir", "a.txt")));
-        Assert.True(File.Exists(Path.Combine(_root, "shared", "files", "a.txt")));
-        Assert.True(File.Exists(Path.Combine(_root, "_shared", "files", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "acme", "dir", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "shared", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "_shared", "a.txt")));
     }
 
     [Theory]
