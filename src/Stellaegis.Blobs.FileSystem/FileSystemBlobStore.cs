@@ -44,10 +44,26 @@ public sealed class FileSystemBlobStore : IBlobStore
         Guard.NotNull(content);
 
         var path = ResolvePath(location);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
 
-        await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
-        await content.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+        // Written beside the blob, then renamed over it: a rename within one directory is atomic, so a reader sees
+        // the previous content or the new one in full, and a failed copy leaves the previous content untouched.
+        // Opened outside the try: a temporary that already exists is refused, and is not ours to delete.
+        var temporary = Path.Combine(directory, TemporaryName(NewTemporaryId()));
+        var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+        try
+        {
+            await using (file)
+                await content.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch
+        {
+            File.Delete(temporary);
+            throw;
+        }
 
         _logger.LogDebug("Wrote blob to {Container}/{Key}", Container(location), location.Key);
     }
@@ -68,6 +84,15 @@ public sealed class FileSystemBlobStore : IBlobStore
 
         return Task.CompletedTask;
     }
+
+    /// <summary>Gives each write its temporary file. Replaced by the tests only.</summary>
+    internal Func<Guid> NewTemporaryId { get; init; } = Guid.NewGuid;
+
+    /// <summary>
+    /// The name of a temporary file: no key can produce it, since a key is ASCII and <c>§</c> (U+00A7) is not, and
+    /// its length is fixed, whatever the length of the key.
+    /// </summary>
+    internal static string TemporaryName(Guid id) => $"§{id:N}.tmp";
 
     private static string Container(BlobLocation location)
         => $"{location.Space.ToSegment()}/{location.Name}";

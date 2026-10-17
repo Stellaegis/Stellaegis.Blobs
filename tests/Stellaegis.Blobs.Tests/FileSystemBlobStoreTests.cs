@@ -50,6 +50,49 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Failed_write_keeps_the_previous_blob_and_leaves_no_temporary_file()
+    {
+        var location = new BlobLocation(Acme, "files", "a.txt");
+        await WriteAsync(location, "previous");
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            _store.WriteAsync(location, new FailingStream(), TestContext.Current.CancellationToken));
+
+        Assert.Equal("previous", await ReadAsync(location));
+        Assert.Equal(["a.txt"], Directory.GetFiles(Path.Combine(_root, "acme", "files")).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Planted_temporary_file_fails_the_write_and_stays_in_place()
+    {
+        var id = Guid.NewGuid();
+        var pinned = new FileSystemBlobStore(
+            Options.Create(new FileSystemBlobOptions { RootPath = _root }), NullLogger<FileSystemBlobStore>.Instance)
+        { NewTemporaryId = () => id };
+
+        var location = new BlobLocation(Acme, "files", "a.txt");
+        await WriteAsync(location, "previous");
+        var planted = Path.Combine(_root, "acme", "files", FileSystemBlobStore.TemporaryName(id));
+        await File.WriteAllTextAsync(planted, "planted", TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            pinned.WriteAsync(location, new MemoryStream("new"u8.ToArray()), TestContext.Current.CancellationToken));
+
+        Assert.Equal("previous", await ReadAsync(location));
+        Assert.Equal("planted", await File.ReadAllTextAsync(planted, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Key_with_a_segment_of_the_maximum_length_is_written()
+    {
+        var location = new BlobLocation(Acme, "files", new string('a', BlobLocation.MaxSegmentLength));
+
+        await WriteAsync(location, "hello");
+
+        Assert.Equal("hello", await ReadAsync(location));
+    }
+
+    [Fact]
     public async Task Absent_blob_reads_as_null()
     {
         var location = new BlobLocation(Acme, "files", "missing.txt");
@@ -141,5 +184,32 @@ public sealed class FileSystemBlobStoreTests : IDisposable
         Assert.NotNull(stream);
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A source that yields a first chunk, then fails, as a connection cut during an upload does.</summary>
+    private sealed class FailingStream : Stream
+    {
+        private bool _started;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_started)
+                throw new IOException("The source failed during the copy.");
+
+            _started = true;
+            buffer[offset] = (byte)'x';
+            return 1;
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

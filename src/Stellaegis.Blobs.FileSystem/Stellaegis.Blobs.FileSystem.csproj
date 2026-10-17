@@ -19,6 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Stellaegis.Blobs.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Stellaegis.Blobs\Stellaegis.Blobs.csproj" />
   </ItemGroup>
 
