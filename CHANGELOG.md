@@ -123,6 +123,8 @@ First release as a standalone library.
 - `FileSystemBlobStore`, in `Stellaegis.Blobs.FileSystem`, which stores each holder and space pair in a
   directory of its own under a root, and `AddStellaegisFileSystemBlobStore`, which registers it.
 
+[3.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v3.0.0
+[2.0.1]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v2.0.1
 [2.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v2.0.0
 [1.0.1]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v1.0.0
