@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-10-19
+
+Depends on Stellaegis.Primitives 4.1.0. The API of this library does not change: the version
+number aligns the Stellaegis packages on 4.0.0, once.
+
+### Changed
+
+- Depends on Stellaegis.Primitives 4.1.0. Its API breaks are in Stellaegis.Primitives.AspNetCore,
+  which this library does not use.
+
+### Updating from 3.0.0
+
+- Nothing to change in your code. Your project resolves Stellaegis.Primitives 4.1.0 or later; if it
+  references Stellaegis.Primitives.AspNetCore, follow that package's changelog for 4.0.0.
+
 ## [3.0.0] — 2026-10-17
 
 A blob is addressed by a `Space` from Stellaegis.Primitives 3.0.0 and a key: the blob space name is
@@ -123,6 +138,7 @@ First release as a standalone library.
 - `FileSystemBlobStore`, in `Stellaegis.Blobs.FileSystem`, which stores each holder and space pair in a
   directory of its own under a root, and `AddStellaegisFileSystemBlobStore`, which registers it.
 
+[4.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v4.0.0
 [3.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v3.0.0
 [2.0.1]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v2.0.1
 [2.0.0]: https://github.com/Stellaegis/Stellaegis.Blobs/releases/tag/v2.0.0
