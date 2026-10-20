@@ -1,10 +1,10 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Stellaegis.Blobs.FileSystem;
 
 /// <summary>
-/// Filesystem implementation of <see cref="IBlobStore"/> for development. Each space maps to a
+/// Filesystem implementation of <see cref="IBlobStore"/>, for development, tests and applications that run on a
+/// single machine. Each space maps to a
 /// directory under the configured root: <c>{root}/{compartment}/{key}</c> for a compartment, or
 /// <c>{root}/_shared/{key}</c> for the shared space. Everything a compartment holds therefore sits under
 /// one directory. The first segment is <see cref="Space.ToSegment"/>, the projection every Stellaegis module
@@ -13,15 +13,13 @@ namespace Stellaegis.Blobs.FileSystem;
 public sealed class FileSystemBlobStore : IBlobStore
 {
     private readonly string _root;
-    private readonly ILogger<FileSystemBlobStore> _logger;
 
     /// <summary>Creates the store, validating that a root path is configured.</summary>
-    public FileSystemBlobStore(IOptions<FileSystemBlobOptions> options, ILogger<FileSystemBlobStore> logger)
+    public FileSystemBlobStore(IOptions<FileSystemBlobOptions> options)
     {
         Guard.NotNull(options);
-        _logger = Guard.NotNull(logger);
 
-        var root = Guard.Satisfies(options.Value.RootPath, r => !string.IsNullOrWhiteSpace(r),
+        var root = Guard.Satisfies(options.Value.RootPath, _ => options.Value.FindError() is null,
             $"{nameof(FileSystemBlobOptions)}.{nameof(FileSystemBlobOptions.RootPath)} is required.", nameof(options));
 
         _root = Path.GetFullPath(root);
@@ -64,8 +62,6 @@ public sealed class FileSystemBlobStore : IBlobStore
             File.Delete(temporary);
             throw;
         }
-
-        _logger.LogDebug("Wrote blob to {Space}/{Key}", location.Space.ToSegment(), location.Key);
     }
 
     /// <inheritdoc />
@@ -77,10 +73,7 @@ public sealed class FileSystemBlobStore : IBlobStore
     {
         var path = ResolvePath(location);
         if (File.Exists(path))
-        {
             File.Delete(path);
-            _logger.LogDebug("Deleted blob {Space}/{Key}", location.Space.ToSegment(), location.Key);
-        }
 
         return Task.CompletedTask;
     }

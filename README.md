@@ -99,9 +99,8 @@ stores. `AddStellaegisFileSystemBlobStore` registers a single store, so you regi
 yourself, for instance as a keyed service:
 
 ```csharp
-builder.Services.AddKeyedSingleton<IBlobStore>("trash", (services, _) => new FileSystemBlobStore(
-    Options.Create(new FileSystemBlobOptions { RootPath = "/mnt/cold/blobs" }),
-    services.GetRequiredService<ILogger<FileSystemBlobStore>>()));
+builder.Services.AddKeyedSingleton<IBlobStore>("trash", (_, _) => new FileSystemBlobStore(
+    Options.Create(new FileSystemBlobOptions { RootPath = "/mnt/cold/blobs" })));
 ```
 
 The part of your application that handles the trash then receives it with
@@ -219,11 +218,11 @@ the singleton `IBlobStore`; a second call keeps the first registration. To use s
 builder.Services.AddStellaegisFileSystemBlobStore(o => o.RootPath = "/var/lib/myapp/blobs");
 ```
 
-To read the root from configuration, bind the section named by `FileSystemBlobOptions.SectionName`:
+To read the root from configuration, pass the configuration: the options are bound from the section named by
+`FileSystemBlobOptions.SectionName`, `Stellaegis:Blobs:FileSystem`, unless another name is given.
 
 ```csharp
-builder.Services.AddStellaegisFileSystemBlobStore(
-    o => builder.Configuration.GetSection(FileSystemBlobOptions.SectionName).Bind(o));
+builder.Services.AddStellaegisFileSystemBlobStore(builder.Configuration);
 ```
 
 ```json
@@ -236,8 +235,10 @@ builder.Services.AddStellaegisFileSystemBlobStore(
 }
 ```
 
-`RootPath` is required: the store throws an `ArgumentException` when it is created without one. A
-relative path is resolved against the process's current directory when the store is created.
+`RootPath` is required, and it is checked when the host starts, not at the first write: the options are
+registered with `AddStellaegisOptions` from `Stellaegis.Primitives.Hosting`, and a missing root fails the host with an
+`OptionsValidationException`. A store built by hand throws an `ArgumentException` instead. A relative path is
+resolved against the process's current directory when the store is created.
 Directories are created on the first write and are not removed when their last blob is deleted.
 
 The adapter suits development, tests and applications that run on a single machine. The stream

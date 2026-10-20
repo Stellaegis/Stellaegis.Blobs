@@ -1,9 +1,9 @@
 namespace Stellaegis.Blobs;
 
 /// <summary>
-/// Stores and retrieves opaque binary content, isolated per compartment and blob space
-/// (see <see cref="BlobLocation"/>). One abstraction, with the storage backend chosen by the adapter
-/// registered.
+/// Stores and retrieves opaque binary content, isolated per space — a compartment, or the shared space — and
+/// addressed by a key (see <see cref="BlobLocation"/>). One abstraction, with the storage backend chosen by the
+/// adapter registered.
 /// </summary>
 /// <remarks>
 /// <para>

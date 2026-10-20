@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] — 2026-10-20
+
+Depends on Stellaegis.Primitives 5.0.0, the one break of the 5.0 line of the family, and takes from it the one form
+of a module's options. The API of this library does not break: the version number follows the family.
+
+### Migrating from 4.x
+
+- Your project resolves Stellaegis.Primitives 5.0.0 or later, and, for the filesystem adapter,
+  Stellaegis.Primitives.Hosting 5.0.0.
+- `FileSystemBlobStore` no longer takes an `ILogger<FileSystemBlobStore>`: a store built by hand takes its options
+  alone, `new FileSystemBlobStore(Options.Create(…))`. An application that registers it with
+  `AddStellaegisFileSystemBlobStore` changes nothing, and no longer needs logging registered.
+- A missing `RootPath` fails the host when it starts, with an `OptionsValidationException`, instead of the first
+  resolution of the store.
+
+### Added
+
+- `AddStellaegisFileSystemBlobStore(IConfiguration, sectionName)`: the options bound from
+  `Stellaegis:Blobs:FileSystem`, beside the overload configured in code. Both validate the options at startup,
+  through `AddStellaegisOptions` of Stellaegis.Primitives.Hosting; `FileSystemBlobOptions` implements
+  `IValidatableOptions`.
+
+### Changed
+
+- Depends on Stellaegis.Primitives 5.0.0 and Stellaegis.Primitives.Hosting 5.0.0.
+
+### Removed
+
+- The dependency on Microsoft.Extensions.Logging.Abstractions, which served two debug lines.
+
 ## [4.0.0] — 2026-10-19
 
 Depends on Stellaegis.Primitives 4.1.0. The API of this library does not change: the version

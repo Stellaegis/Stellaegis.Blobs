@@ -1,5 +1,4 @@
 using System.Text;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Stellaegis.Blobs.FileSystem;
 using Stellaegis.Primitives;
@@ -67,7 +66,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     {
         var id = Guid.NewGuid();
         var pinned = new FileSystemBlobStore(
-            Options.Create(new FileSystemBlobOptions { RootPath = _root }), NullLogger<FileSystemBlobStore>.Instance)
+            Options.Create(new FileSystemBlobOptions { RootPath = _root }))
         { NewTemporaryId = () => id };
 
         var location = new BlobLocation(Acme, "a.txt");
@@ -170,7 +169,7 @@ public sealed class FileSystemBlobStoreTests : IDisposable
     }
 
     private static FileSystemBlobStore CreateStore(string root)
-        => new(Options.Create(new FileSystemBlobOptions { RootPath = root }), NullLogger<FileSystemBlobStore>.Instance);
+        => new(Options.Create(new FileSystemBlobOptions { RootPath = root }));
 
     private Task WriteAsync(BlobLocation location, string content)
         => _store.WriteAsync(location, new MemoryStream(Encoding.UTF8.GetBytes(content)), TestContext.Current.CancellationToken);
