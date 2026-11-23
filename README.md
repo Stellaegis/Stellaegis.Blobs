@@ -248,6 +248,22 @@ limit is the total path length: the root directory, the compartment directory an
 caps paths at 260 characters on Windows can refuse a long one. Choose a short root if your keys are
 long.
 
+### Encryption at rest
+
+The adapter writes each blob as it receives it: it does not encrypt the files. Encryption at rest is
+left to the storage, for example volume encryption on the host, with BitLocker on Windows or LUKS on
+Linux.
+
+Volume encryption protects the content of a disk that is stolen or discarded, and of a copy of the
+volume taken outside the host. It does not protect against a reader on the running host: an
+administrator, or a compromised process, reads the files in clear, as your application does. A backup
+of the root directory also holds the content in clear, unless the backup is encrypted in turn.
+
+The key is the same for every compartment. A compartment is therefore erased by deleting its
+directory, and not by destroying a key of its own. Encryption inside the library, with one key per
+compartment, would allow that. It would also make the library hold the keys, and it would have to keep
+byte-range reads possible. The library does not offer it.
+
 ## One storage per compartment
 
 Because a location carries the compartment and nothing physical, an `IBlobStore` can send each
